@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 
 k8s_validate() {
-  command -v kubectl >/dev/null 2>&1 || die "kubectl não encontrado."
+  if command -v kubeconform >/dev/null 2>&1; then
+    log "Validando manifests K8s (kubeconform, offline)..."
+    kubeconform -summary -ignore-missing-schemas "${K8S_DIR}/"
+    log_ok "Manifests K8s válidos."
+    return 0
+  fi
 
-  log "Validando manifests K8s (dry-run)..."
+  command -v kubectl >/dev/null 2>&1 || die "Instale kubeconform (recomendado) ou kubectl."
+
+  log_warn "kubeconform não encontrado — kubectl exige cluster para CRDs (ex: ServiceMonitor)."
+  log "Validando manifests K8s (kubectl dry-run)..."
   kubectl apply --dry-run=client --validate=false -f "${K8S_DIR}/"
   log_ok "Manifests K8s válidos."
 }

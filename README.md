@@ -14,7 +14,7 @@ Repositório: https://github.com/AeroRF/aerorf-devops
 
 ## CI
 
-Workflow `devops-ci.yml`: valida compose dev/prod + `kubectl apply --dry-run=client --validate=false` nos manifests.
+Workflow `devops-ci.yml`: valida compose dev/prod + **kubeconform** nos manifests K8s (sem cluster; ignora schema de CRDs como `ServiceMonitor`).
 
 ## Dev local (híbrido)
 
