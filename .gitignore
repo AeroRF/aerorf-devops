@@ -1,0 +1,6 @@
+compose/.env.dev
+compose/.env.prod
+keys/*.pem
+*.log
+.DS_Store
+.idea/

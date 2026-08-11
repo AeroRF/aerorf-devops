@@ -1,0 +1,51 @@
+# =============================================================================
+# AeroRF — Produção/Staging: SOMENTE aplicações stateless
+# Postgres, MinIO e Observabilidade são servidores EXTERNOS (env vars)
+# Uso: docker compose -f compose/docker-compose.prod-apps.yml --env-file compose/.env.prod up
+# =============================================================================
+
+networks:
+  aerorf-net:
+    driver: bridge
+
+services:
+  api:
+    image: ghcr.io/aerorf/aerorf-backend:${AERORF_BACKEND_TAG:-latest}
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+    networks:
+      - aerorf-net
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/aerorf/aerorf-frontend:${AERORF_FRONTEND_TAG:-latest}
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - aerorf-net
+    restart: unless-stopped
+
+  gateway:
+    image: traefik:v2.11
+    command:
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - aerorf-net
+    restart: unless-stopped

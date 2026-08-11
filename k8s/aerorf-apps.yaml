@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aerorf-prod
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aerorf-api-secrets
+  namespace: aerorf-prod
+type: Opaque
+stringData:
+  DATABASE_URL: postgres://aerorf_user:CHANGE_ME@db.aerorf.internal:5432/aerorf
+  REDIS_URL: redis://redis.aerorf.internal:6379
+  S3_ENDPOINT: https://storage.aerorf.internal
+  S3_ACCESS_KEY: CHANGE_ME
+  S3_SECRET_KEY: CHANGE_ME
+  JWT_PRIVATE_KEY: |
+    -----BEGIN RSA PRIVATE KEY-----
+    REPLACE
+    -----END RSA PRIVATE KEY-----
+  JWT_PUBLIC_KEY: |
+    -----BEGIN PUBLIC KEY-----
+    REPLACE
+    -----END PUBLIC KEY-----
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aerorf-api
+  namespace: aerorf-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aerorf-api
+  template:
+    metadata:
+      labels:
+        app: aerorf-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/aerorf/aerorf-backend:latest
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef:
+                name: aerorf-api-secrets
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: S3_BUCKET
+              value: aerorf-prod
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 4000
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 4000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aerorf-api
+  namespace: aerorf-prod
+spec:
+  selector:
+    app: aerorf-api
+  ports:
+    - port: 4000
+      targetPort: 4000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aerorf-api
+  namespace: aerorf-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aerorf-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aerorf-web
+  namespace: aerorf-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aerorf-web
+  template:
+    metadata:
+      labels:
+        app: aerorf-web
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/aerorf/aerorf-frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: NEXT_PUBLIC_API_URL
+              value: https://api.aerorf.com.br/api/v1
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aerorf-web
+  namespace: aerorf-prod
+spec:
+  selector:
+    app: aerorf-web
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aerorf-ingress
+  namespace: aerorf-prod
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: app.aerorf.com.br
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aerorf-web
+                port:
+                  number: 3000
+    - host: api.aerorf.com.br
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aerorf-api
+                port:
+                  number: 4000
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aerorf-api
+  namespace: aerorf-prod
+spec:
+  selector:
+    matchLabels:
+      app: aerorf-api
+  endpoints:
+    - port: 4000
+      path: /metrics
+      interval: 15s

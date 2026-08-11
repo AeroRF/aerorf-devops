@@ -1,0 +1,45 @@
+name: DevOps CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'compose/**'
+      - 'k8s/**'
+      - 'observability/**'
+      - 'devops/**'
+      - '.github/workflows/devops-ci.yml'
+  pull_request:
+    paths:
+      - 'compose/**'
+      - 'k8s/**'
+      - 'devops/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create dummy env files for compose config
+        run: |
+          cp compose/.env.dev.example compose/.env.dev
+          cp compose/.env.prod.example compose/.env.prod
+          sed -i 's/CHANGE_ME/replace_me/g' compose/.env.prod
+
+      - name: Validate compose dev
+        working-directory: compose
+        run: docker compose -f docker-compose.dev.yml config
+
+      - name: Validate compose dev with apps profile
+        working-directory: compose
+        run: docker compose -f docker-compose.dev.yml --profile apps config
+
+      - name: Validate compose prod-apps
+        working-directory: compose
+        run: docker compose -f docker-compose.prod-apps.yml --env-file .env.prod config
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Validate K8s manifests
+        run: kubectl apply --dry-run=client -f k8s/

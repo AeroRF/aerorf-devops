@@ -1,0 +1,9 @@
+# Perfil de testes de integração — dependências externas via compose dev
+# Uso: docker compose -f docker-compose.dev.yml -f docker-compose.test.yml run --rm api npm run test:integration -w @aerorf/api
+
+services:
+  api:
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgres://aerorf:aerorf@pgbouncer:5432/aerorf
+      REDIS_URL: redis://redis:6379
