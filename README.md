@@ -1,78 +1,59 @@
 # aerorf-devops
 
-Infraestrutura AeroRF SaaS — Docker Compose (dev/prod), Kubernetes, observabilidade e CLI DevOps.
+Infraestrutura AeroRF — Docker Compose, Kubernetes, observabilidade, CLI DevOps.
 
-Organização: [AeroRF](https://github.com/AeroRF)
+Repositório: https://github.com/AeroRF/aerorf-devops
 
 ## Repositórios relacionados
 
 | Repo | Função |
 |---|---|
-| [aerorf-packages](https://github.com/AeroRF/aerorf-packages) | `@aerorf/shared`, `@aerorf/business-rules` |
+| [aerorf-packages](https://github.com/AeroRF/aerorf-packages) | Pacotes npm compartilhados |
 | [aerorf-backend](https://github.com/AeroRF/aerorf-backend) | API REST |
 | [aerorf-frontend](https://github.com/AeroRF/aerorf-frontend) | Next.js |
 
-## Estrutura
+## CI
 
-```text
-compose/           Docker Compose dev + prod-apps + migrations SQL
-k8s/               Manifests Kubernetes
-observability/     Prometheus, Grafana, Loki, Promtail
-devops/            CLI aerorf-devops.sh
-keys/              JWT dev (gitignored)
-```
+Workflow `devops-ci.yml`: valida compose dev/prod + `kubectl apply --dry-run=client --validate=false` nos manifests.
 
-## Dev — instalação rápida
+## Dev local (híbrido)
 
-Clone os 4 repos no mesmo diretório pai:
-
-```text
-~/aerorf/
-  aerorf-packages/
-  aerorf-devops/
-  aerorf-backend/
-  aerorf-frontend/
-```
+Clone os 4 repos no mesmo diretório pai (`~/aerorf/`).
 
 ```bash
-cd aerorf-devops
 chmod +x devops/aerorf-devops.sh
-
-# Infra no Docker + apps locais (recomendado)
 ./devops/aerorf-devops.sh install dev --local-apps
-
-# Backend e frontend (outros terminais)
-cd ../aerorf-backend && cp .env.example .env && npm install ../aerorf-packages/packages/* && npm install
-npm run migrate && npm run seed && npm run dev
-
-cd ../aerorf-frontend && cp .env.example .env.local && npm install ../aerorf-packages/packages/* && npm install
-npm run dev
 ```
 
-## Dev — stack completa via GHCR
+Migrate/seed rodam no repo `../aerorf-backend` (variável `AERORF_BACKEND_DIR` em `compose/.env.dev`).
 
-Após CI publicar imagens:
+## Dev via GHCR (profile apps)
+
+Após CI publicar imagens backend/frontend:
 
 ```bash
-./devops/aerorf-devops.sh install dev   # profile apps — puxa ghcr.io/aerorf/*
+./devops/aerorf-devops.sh install dev   # sobe infra + ghcr.io/aerorf/aerorf-*
 ```
 
-## Comandos
-
-| Comando | Descrição |
-|---|---|
-| `install dev` | Infra + apps GHCR (profile apps) + migrate + seed |
-| `install dev --local-apps` | Só infra; apps via npm nos repos backend/frontend |
-| `up dev [--apps]` | Sobe stack |
-| `down dev` | Para containers |
-| `migrate` / `seed` | Via repo `../aerorf-backend` |
-| `k8s validate\|apply` | Manifests em `k8s/` |
-
-## Imagens Docker (GHCR)
+## Imagens
 
 - `ghcr.io/aerorf/aerorf-backend:latest`
 - `ghcr.io/aerorf/aerorf-frontend:latest`
 
-## Produção
+## Comandos CLI
 
-Apps stateless — Postgres, MinIO e observabilidade **externos** (`compose/.env.prod.example`).
+| Comando | Descrição |
+|---|---|
+| `install dev --local-apps` | Infra Docker; apps via npm nos repos |
+| `install dev` | Infra + apps GHCR (profile `apps`) |
+| `migrate` / `seed` | Delegado ao aerorf-backend |
+| `k8s validate` | Dry-run dos manifests |
+| `k8s apply` | Deploy em cluster configurado |
+
+## Pipeline → deploy (próximo passo)
+
+1. CI verde nos 4 repos
+2. GitHub → Settings → Actions → General → **Workflow permissions: Read and write**
+3. GHCR: tornar packages visíveis para repos privados backend/frontend
+4. Secret `KUBE_CONFIG` (base64 do kubeconfig) no environment `development`
+5. Substituir job de deploy placeholder por `kubectl set image` real
