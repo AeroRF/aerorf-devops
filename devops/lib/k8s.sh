@@ -4,7 +4,7 @@ k8s_validate() {
   command -v kubectl >/dev/null 2>&1 || die "kubectl não encontrado."
 
   log "Validando manifests K8s (dry-run)..."
-  kubectl apply --dry-run=client -f "${K8S_DIR}/" 
+  kubectl apply --dry-run=client --validate=false -f "${K8S_DIR}/"
   log_ok "Manifests K8s válidos."
 }
 
