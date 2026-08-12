@@ -151,3 +151,52 @@ groups:
         annotations:
           summary: "Conexões PostgreSQL elevadas"
           description: "{{ $value }} conexões ativas."
+
+  - name: aerorf-notifications
+    rules:
+      - alert: AeroRFNotificationEmailFailed
+        expr: increase(notification_emails_total{result="failed"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Falha no envio de e-mail de alerta"
+          description: "Módulo {{ $labels.alert_module }} — verifique Resend e fila notification_queue."
+
+      - alert: AeroRFNotificationDeliveryGap
+        expr: increase(notification_delivery_gaps_total[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alerta crítico sem entrega de e-mail"
+          description: "Módulo {{ $labels.alert_module }}, motivo {{ $labels.reason }}."
+
+      - alert: AeroRFNotificationOSNotDelivered
+        expr: |
+          (increase(notification_delivery_gaps_total{alert_module="manutencao"}[15m]) > 0)
+          or (increase(notification_emails_total{result="failed",alert_module="manutencao"}[15m]) > 0)
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OS aberta / manutenção — e-mail não enviado"
+          description: "Alerta operacional de manutenção sem entrega. Verifique RESEND_API_KEY, destinatários e fila."
+
+      - alert: AeroRFNotificationQueueBacklog
+        expr: notification_queue_pending > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fila de e-mails com backlog"
+          description: "{{ $value }} e-mails pendentes na fila."
+
+      - alert: AeroRFNotificationQueuePermanentFailures
+        expr: notification_queue_failed > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "E-mails com falha permanente na fila"
+          description: "{{ $value }} registros com status failed — revisar notification_queue.last_error."
