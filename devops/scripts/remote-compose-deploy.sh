@@ -269,6 +269,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/016_truck_documents_versions.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/017_telemetry_storage.sql" ]]; then
+    local tel_storage_col
+    tel_storage_col="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='telemetry_missions' AND column_name='storage_key';" \
+      2>/dev/null || echo 0)"
+    if [[ "${tel_storage_col}" -eq 0 ]]; then
+      log "Aplicando migration telemetria storage (017)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/017_telemetry_storage.sql"
+    fi
+  fi
 }
 
 run_seed() {
