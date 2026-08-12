@@ -113,7 +113,7 @@ log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
 compose_dev --profile apps pull api web
 
 log "Subindo API + Web (force-recreate + pull)..."
-compose_dev --profile apps up -d --force-recreate --pull always api web
+compose_dev --profile apps up -d --force-recreate --pull always api web web-api-proxy
 
 log "Web image: $(docker inspect aerorf_web --format '{{.Config.Image}}' 2>/dev/null || echo unknown)"
 
@@ -142,6 +142,15 @@ if ! curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null; then
 fi
 
 curl -sf http://127.0.0.1:3000/api/health >/dev/null || log "Web ainda inicializando — docker logs aerorf_web"
+
+log "Aguardando Web..."
+for i in $(seq 1 30); do
+  if curl -sf http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+    log "Web health OK (tentativa ${i})"
+    break
+  fi
+  sleep 2
+done
 
 log "Smoke test login (via proxy Next :3000)..."
 login_code="$(curl -s -o /tmp/aerorf-login.json -w '%{http_code}' \
