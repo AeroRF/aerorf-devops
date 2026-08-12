@@ -141,5 +141,19 @@ fi
 
 curl -sf http://127.0.0.1:3000/api/health >/dev/null || log "Web ainda inicializando — docker logs aerorf_web"
 
+log "Smoke test login (via proxy Next :3000)..."
+login_code="$(curl -s -o /tmp/aerorf-login.json -w '%{http_code}' \
+  -X POST http://127.0.0.1:3000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@aerorf.com.br","password":"admin123"}')"
+if [[ "${login_code}" != "200" ]]; then
+  log "Login smoke test falhou (HTTP ${login_code}):"
+  head -c 400 /tmp/aerorf-login.json 2>/dev/null || true
+  echo ""
+  docker logs aerorf_web --tail 30 2>&1 || true
+  exit 1
+fi
+log "Login smoke test OK."
+
 log "Deploy concluído."
 compose_dev --profile apps ps
