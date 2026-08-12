@@ -71,7 +71,8 @@ chmod 600 ~/.ssh/authorized_keys
 
 | Secret | Valor |
 |---|---|
-| `DEV_SSH_HOST` | IP público HostGator |
+| `DEV_SSH_HOST` | `143.95.222.78` (IP público HostGator) |
+| `DEV_SSH_PORT` | `22022` (HostGator usa porta não padrão; opcional — default no workflow) |
 | `DEV_SSH_USER` | `root` |
 | `DEV_SSH_KEY` | conteúdo de `~/.ssh/aerorf_deploy` (privada) |
 | `GHCR_TOKEN` | PAT GitHub com `read:packages` |

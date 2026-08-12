@@ -57,15 +57,18 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
           SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          SSH_PORT: ${{ secrets.DEV_SSH_PORT || '22022' }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ secrets.GHCR_USER || github.actor }}
         run: |
           USER="${SSH_USER:-root}"
-          echo "Conectando em ${USER}@${SSH_HOST}..."
+          echo "Conectando em ${USER}@${SSH_HOST}:${SSH_PORT}..."
 
           ssh -i "${HOME}/.ssh/id_deploy" \
+            -p "${SSH_PORT}" \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=30 \
+            -o HostKeyAlgorithms=+ssh-rsa \
             "${USER}@${SSH_HOST}" \
             "export GHCR_TOKEN='${GHCR_TOKEN}'; \
              export GHCR_USER='${GHCR_USER}'; \
@@ -78,9 +81,14 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
           SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          SSH_PORT: ${{ secrets.DEV_SSH_PORT || '22022' }}
         run: |
           USER="${SSH_USER:-root}"
-          ssh -i "${HOME}/.ssh/id_deploy" -o StrictHostKeyChecking=no "${USER}@${SSH_HOST}" \
+          ssh -i "${HOME}/.ssh/id_deploy" \
+            -p "${SSH_PORT}" \
+            -o StrictHostKeyChecking=no \
+            -o HostKeyAlgorithms=+ssh-rsa \
+            "${USER}@${SSH_HOST}" \
             "curl -sf http://127.0.0.1:4000/api/v1/health; echo; curl -sf http://127.0.0.1:3000/api/health; echo"
           echo ""
           echo "Web:  http://${SSH_HOST}:3000"
