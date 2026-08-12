@@ -164,12 +164,18 @@ services:
   alertmanager:
     image: prom/alertmanager:latest
     environment:
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-http://127.0.0.1:65534/skip}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
     volumes:
       - ../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - sed "s|__ALERT_WEBHOOK_URL__|$$ALERT_WEBHOOK_URL|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+      - |
+        if [ -n "$$SLACK_WEBHOOK_URL" ]; then
+          sed "s|__SLACK_WEBHOOK_URL__|$$SLACK_WEBHOOK_URL|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml
+        else
+          printf 'global:\n  resolve_timeout: 5m\nroute:\n  receiver: null\nreceivers:\n  - name: null\n' > /tmp/alertmanager.yml
+        fi
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     ports:
       - "9093:9093"
     networks:
@@ -239,9 +245,10 @@ services:
   grafana:
     image: grafana/grafana:latest
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/aerorf-overview.json
     volumes:
       - grafana_data:/var/lib/grafana
       - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro

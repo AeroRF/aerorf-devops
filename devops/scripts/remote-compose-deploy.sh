@@ -34,6 +34,16 @@ ensure_jwt_keys() {
   chmod 600 "${KEYS_DIR}/jwt-private.pem"
 }
 
+set_env_var() {
+  local key="$1"
+  local val="$2"
+  if grep -q "^${key}=" "${COMPOSE_DIR}/.env.dev" 2>/dev/null; then
+    sed -i "s|^${key}=.*|${key}=${val}|" "${COMPOSE_DIR}/.env.dev"
+  else
+    echo "${key}=${val}" >> "${COMPOSE_DIR}/.env.dev"
+  fi
+}
+
 ensure_env_dev() {
   [[ -f "${COMPOSE_DIR}/.env.dev" ]] || cp "${COMPOSE_DIR}/.env.dev.example" "${COMPOSE_DIR}/.env.dev"
 
@@ -55,13 +65,20 @@ ensure_env_dev() {
     log "CORS_ORIGIN → http://${vps_host}:3000"
   fi
 
-  if [[ -n "${ALERT_WEBHOOK_URL:-}" ]]; then
-    if grep -q '^ALERT_WEBHOOK_URL=' "${COMPOSE_DIR}/.env.dev" 2>/dev/null; then
-      sed -i "s|^ALERT_WEBHOOK_URL=.*|ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}|" "${COMPOSE_DIR}/.env.dev"
-    else
-      echo "ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}" >> "${COMPOSE_DIR}/.env.dev"
-    fi
-    log "ALERT_WEBHOOK_URL configurado para Alertmanager"
+  if [[ -n "${SLACK_WEBHOOK_URL:-}" ]]; then
+    set_env_var SLACK_WEBHOOK_URL "${SLACK_WEBHOOK_URL}"
+    log "SLACK_WEBHOOK_URL configurado (Alertmanager → Slack)"
+  elif [[ -n "${ALERT_WEBHOOK_URL:-}" ]]; then
+    set_env_var SLACK_WEBHOOK_URL "${ALERT_WEBHOOK_URL}"
+    log "SLACK_WEBHOOK_URL ← ALERT_WEBHOOK_URL (legado)"
+  fi
+
+  if [[ -n "${GRAFANA_ADMIN_USER:-}" ]]; then
+    set_env_var GRAFANA_ADMIN_USER "${GRAFANA_ADMIN_USER}"
+  fi
+  if [[ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
+    set_env_var GRAFANA_ADMIN_PASSWORD "${GRAFANA_ADMIN_PASSWORD}"
+    log "GRAFANA_ADMIN_PASSWORD configurado"
   fi
 }
 

@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: AeroRF
+    orgId: 1
+    folder: AeroRF
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false

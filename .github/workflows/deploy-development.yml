@@ -84,8 +84,21 @@ jobs:
              export GHCR_USER='${GHCR_USER}'; \
              export AERORF_BACKEND_TAG='${{ inputs.backend_tag || 'latest' }}'; \
              export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag || 'latest' }}'; \
-             export ALERT_WEBHOOK_URL='${{ secrets.ALERT_WEBHOOK_URL }}'; \
+             export SLACK_WEBHOOK_URL='${{ secrets.SLACK_WEBHOOK_URL }}'; \
+             export GRAFANA_ADMIN_USER='${{ secrets.GRAFANA_ADMIN_USER }}'; \
+             export GRAFANA_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}'; \
              bash -s" < devops/scripts/remote-compose-deploy.sh
+
+      - name: Notificar Slack — deploy concluído
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          chmod +x devops/scripts/slack-notify.sh
+          STATUS="${{ job.status }}"
+          HOST="${{ secrets.DEV_SSH_HOST }}"
+          devops/scripts/slack-notify.sh "${STATUS}" "Deploy DevOps (VPS)" \
+            "Repo: aerorf-devops\nHost: ${HOST}\nBackend: ${{ inputs.backend_tag || 'latest' }}\nFrontend: ${{ inputs.frontend_tag || 'latest' }}\nCommit: ${{ github.sha }}\nStatus: ${STATUS}"
 
       - name: Health check no VPS
         if: success()

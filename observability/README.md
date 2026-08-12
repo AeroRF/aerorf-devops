@@ -1,71 +1,73 @@
 # Observabilidade AeroRF
 
-Deploy **somente via pipeline** (`aerorf-devops` → `deploy-development.yml`). Não use comandos locais para subir stack em VPS.
+Deploy **somente via pipeline** (`aerorf-devops` → `deploy-development.yml`).
 
-## Separação de ambientes (dados)
+## Grafana — acesso
 
-| Ambiente | Project Compose | Bucket S3 | DB / volumes | Observabilidade |
-|----------|-----------------|-----------|--------------|-----------------|
-| **development** (VPS) | `aerorf-dev` | `aerorf-dev` | Volumes Docker no VPS dev | Stack embutida no compose |
-| **homolog** | `aerorf-hml` (futuro) | `aerorf-hml` | Instância dedicada | Stack dedicada, label `environment=homolog` |
-| **production** | K8s `aerorf-prod` | `aerorf-prod` | PostgreSQL/Redis/MinIO externos | Prometheus/Loki externos (`obs.aerorf.internal`) |
+| Campo | Valor |
+|-------|-------|
+| **URL** | `http://<VPS>:3001` (ex.: http://143.95.222.78:3001) |
+| **Usuário padrão** | `admin` |
+| **Senha padrão** | `admin` (alterar via secret GitHub) |
 
-**Regra:** seed, dados demo e volumes de dev **nunca** são copiados para homolog/prod. Cada ambiente tem secrets e instâncias próprias no GitHub Environments.
+### Alterar login/senha (recomendado)
 
-## O que é monitorado
+No GitHub → **Settings → Environments → development** → Secrets:
 
-### Aplicação (API + Web)
-- HTTP 4xx/5xx — counter + log estruturado (`event: http_error`)
-- Falhas de login e refresh token (`auth_login_failures_total`, `auth_refresh_failures_total`)
-- Erros de storage/presign/upload (`storage_operation_errors_total`)
-- Erros do proxy Next.js → API (`proxy_errors_total`)
-- Latência por rota (`http_request_duration_seconds`)
+| Secret | Exemplo |
+|--------|---------|
+| `GRAFANA_ADMIN_USER` | `admin` |
+| `GRAFANA_ADMIN_PASSWORD` | senha forte |
 
-### Infraestrutura (servidor)
-- CPU, memória, disco (`node-exporter`)
-- Conexões PostgreSQL (`postgres-exporter`)
-- Redis (`redis-exporter`)
-- Targets up/down (API, Web, exporters)
+O deploy injeta no `.env.dev` do VPS. **Nota:** se o volume Grafana já existir, a senha só muda na primeira instalação ou após reset do volume `grafana_data`.
 
-### Logs (Loki + Promtail)
-- Logs JSON do Pino (API) com labels `level`, `event`
-- Erros HTTP e storage marcados como `alert_candidate`
+### Dashboard principal
 
-## Alertas (threshold baixo)
+Após login, abra a pasta **AeroRF** → **AeroRF — Visão Geral do Sistema** (home dashboard automático).
 
-Regras em `prometheus/alerts.yml`:
+Painéis incluídos:
+- API/Web online, erros 4xx/5xx, login, storage
+- Latência P95, proxy Next.js, auth failures
+- CPU, memória, disco do servidor
+- PostgreSQL conexões, Redis memória
+- Logs de erro (Loki)
+- Alertas Prometheus ativos
 
-| Alerta | Condição |
-|--------|----------|
-| `AeroRFHttp5xx` | Qualquer 5xx em 5 min |
-| `AeroRFHttp4xxSpike` | > 5 erros 4xx em 5 min |
-| `AeroRFLoginFailures` | > 2 falhas de login em 5 min |
-| `AeroRFStorageErrors` | Qualquer erro de storage |
-| `AeroRFProxyErrors` | Proxy Next indisponível |
-| `AeroRFHighCpu` | CPU > 70% por 3 min |
-| `AeroRFHighMemory` | Memória > 75% |
-| `AeroRFLowDisk` | Disco < 15% livre |
+## Slack — alertas
 
-Alertmanager (`:9093`) encaminha para webhook configurado em `ALERT_WEBHOOK_URL` (GitHub secret no environment `development`).
+### 1. Alertas de sistema (Prometheus → Alertmanager → Slack)
 
-## Pipeline
+Configure no environment **development**:
 
-1. Push em `aerorf-backend` / `aerorf-frontend` → CI build + GHCR
-2. Push em `aerorf-devops` (`compose/**`, `observability/**`) → `deploy-development.yml`
-3. Script `remote-compose-deploy.sh` sobe: Postgres, Redis, MinIO, **Prometheus, Alertmanager, Grafana, Loki, Promtail, exporters**, depois apps
+```
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
+```
+
+Canal sugerido: `#aerorf-alerts`
+
+Dispara em: 5xx, 4xx em pico, falhas de login, erros storage/proxy, CPU/memória/disco, serviços down.
+
+### 2. Deployments CI/CD (GitHub Actions → Slack)
+
+O mesmo `SLACK_WEBHOOK_URL` notifica:
+
+| Evento | Repo |
+|--------|------|
+| Imagem backend publicada | `aerorf-backend` |
+| Imagem frontend publicada | `aerorf-frontend` |
+| Deploy VPS concluído/falhou | `aerorf-devops` |
+
+Configure o secret em **cada repositório** ou no nível da org `AeroRF`.
+
+## Separação de ambientes
+
+| Ambiente | Dados | Observabilidade |
+|----------|-------|-----------------|
+| **development** | Volumes VPS, bucket `aerorf-dev` | Stack no compose |
+| **homolog/prod** | Instâncias dedicadas | Externa — sem dados de dev |
 
 ## URLs (VPS dev)
 
-- Grafana: `http://<VPS>:3001` (admin/admin)
-- Prometheus: `http://<VPS>:9090`
-- Alertmanager: `http://<VPS>:9093`
-
-## Configurar notificações
-
-No GitHub → Settings → Environments → **development** → secret:
-
-```
-ALERT_WEBHOOK_URL=https://hooks.slack.com/services/...
-```
-
-O deploy injeta no `.env.dev` do VPS via `ensure_env_dev` (se configurado no script).
+- Grafana: `:3001`
+- Prometheus: `:9090`
+- Alertmanager: `:9093`
