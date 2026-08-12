@@ -112,7 +112,7 @@ services:
       S3_SECRET_KEY: aerorf_secret
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
     volumes:
       - ../keys/jwt-private.pem:/run/secrets/jwt_private:ro
       - ../keys/jwt-public.pem:/run/secrets/jwt_public:ro
@@ -130,7 +130,8 @@ services:
     image: ghcr.io/aerorf/aerorf-frontend:${AERORF_FRONTEND_TAG:-latest}
     container_name: aerorf_web
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      API_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
     ports:
       - "3000:3000"
     depends_on:

@@ -1,64 +1,72 @@
 # aerorf-devops
 
-Infraestrutura AeroRF — Docker Compose, Kubernetes, observabilidade e CLI DevOps.
+Infraestrutura AeroRF — Docker Compose, Kubernetes, observabilidade.
 
 Repositório: https://github.com/AeroRF/aerorf-devops
 
-## Repositórios
+## Deploy dev — VPS HostGator (Compose)
 
-| Repo | Função |
-|---|---|
-| [aerorf-packages](https://github.com/AeroRF/aerorf-packages) | Pacotes npm |
-| [aerorf-backend](https://github.com/AeroRF/aerorf-backend) | API → `ghcr.io/aerorf/aerorf-backend` |
-| [aerorf-frontend](https://github.com/AeroRF/aerorf-frontend) | Web → `ghcr.io/aerorf/aerorf-frontend` |
+Usa **`compose/docker-compose.dev.yml`** (mesmo stack do monorepo `infra/compose`, adaptado ao split).
 
-## Deploy development
+### 1. Bootstrap no VPS (uma vez)
 
-Workflow **Deploy Development** (manual): Actions → Deploy Development → Run workflow.
-
-### Opção A — VPS + Docker Compose (recomendado para dev)
-
-1. No servidor: clone `aerorf-devops`, instale Docker, gere JWT em `keys/`
-2. GitHub → **aerorf-devops** → Settings → Environments → `development` → secrets:
-
-| Secret | Conteúdo |
-|---|---|
-| `DEV_SSH_HOST` | IP/hostname do servidor |
-| `DEV_SSH_USER` | usuário SSH (ex: `deploy`) |
-| `DEV_SSH_KEY` | chave privada SSH |
-| `GHCR_TOKEN` | PAT com `read:packages` (se imagens privadas) |
-
-3. Run workflow → target **compose-ssh** → tags `latest`
-
-No servidor, antes do primeiro deploy:
+SSH na HostGator (painel → VPS → SSH, usuário `root` ou o criado):
 
 ```bash
-git clone git@github.com:AeroRF/aerorf-devops.git ~/aerorf/aerorf-devops
-cd ~/aerorf/aerorf-devops && ./devops/aerorf-devops.sh install dev --local-apps
-# clone backend ao lado para migrate/seed
+export VPS_HOST=SEU_IP_PUBLICO   # ex: 123.45.67.89
+curl -fsSL https://raw.githubusercontent.com/AeroRF/aerorf-devops/main/devops/scripts/bootstrap-hostgator.sh | VPS_HOST=$VPS_HOST bash
 ```
 
-### Opção B — Kubernetes (namespace `aerorf-dev`)
-
-Secrets no environment `development`:
-
-| Secret | Conteúdo |
-|---|---|
-| `KUBE_CONFIG` | `cat ~/.kube/config \| base64` |
-
-Antes do deploy, edite `k8s/aerorf-dev.yaml` (JWT e DATABASE_URL reais) ou aplique secret via kubectl.
-
-Run workflow → target **kubernetes**.
-
-NodePorts padrão: API **30040**, Web **30080**.
-
-### Deploy local com imagens GHCR
+Ou manualmente:
 
 ```bash
-export GHCR_TOKEN=<PAT read:packages>
+git clone https://github.com/AeroRF/aerorf-devops.git ~/aerorf/aerorf-devops
+cd ~/aerorf/aerorf-devops
+cp compose/.env.dev.example compose/.env.dev
+# Edite CORS_ORIGIN=http://SEU_IP:3000
+chmod +x devops/aerorf-devops.sh
+./devops/aerorf-devops.sh install dev --local-apps
+```
+
+### 2. GHCR + apps
+
+```bash
+export GHCR_TOKEN=<PAT GitHub com read:packages>
 export GHCR_USER=<seu-user-github>
+cd ~/aerorf/aerorf-devops
 ./devops/aerorf-devops.sh install dev
 ```
+
+### 3. Firewall HostGator
+
+Libere no painel ou `ufw`:
+
+| Porta | Serviço |
+|---|---|
+| 3000 | Web |
+| 4000 | API (opcional se usar proxy `/api/v1` no front) |
+| 22 | SSH |
+
+### 4. GitHub Actions (deploy automático)
+
+Environment **development** em `aerorf-devops` → secrets:
+
+| Secret | Valor |
+|---|---|
+| `DEV_SSH_HOST` | IP HostGator |
+| `DEV_SSH_USER` | `root` ou usuário SSH |
+| `DEV_SSH_KEY` | chave privada (par sem senha para Actions) |
+| `GHCR_TOKEN` | PAT `read:packages` |
+
+Actions → **Deploy Development** → target **compose-ssh** → Run.
+
+### URLs
+
+- Web: `http://SEU_IP:3000`
+- API health: `http://SEU_IP:4000/api/v1/health`
+- Login demo (após seed): `admin@aerorf.com.br` / `admin123`
+
+O front usa `/api/v1` relativo (proxy Next → container `api`) — funciona com IP público sem rebuild.
 
 ## CI
 
@@ -68,7 +76,7 @@ export GHCR_USER=<seu-user-github>
 ## CLI
 
 ```bash
-./devops/aerorf-devops.sh install dev --local-apps  # infra only
-./devops/aerorf-devops.sh install dev              # infra + GHCR apps
-./devops/aerorf-devops.sh k8s validate
+./devops/aerorf-devops.sh install dev --local-apps
+./devops/aerorf-devops.sh install dev
+./devops/aerorf-devops.sh logs dev api
 ```
