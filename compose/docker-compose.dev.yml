@@ -32,7 +32,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     networks:
       - aerorf-net
     healthcheck:
@@ -50,7 +50,7 @@ services:
       MAX_CLIENT_CONN: 200
       DEFAULT_POOL_SIZE: 20
     ports:
-      - "6432:5432"
+      - "127.0.0.1:6432:5432"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,8 +62,7 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
+    # Sem porta no host — evita conflito com Redis do SO (6379); API usa redis:6379 na rede interna
     networks:
       - aerorf-net
 

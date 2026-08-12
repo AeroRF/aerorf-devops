@@ -64,7 +64,7 @@ cmd_down_dev() {
 
 cmd_migrate() {
   load_dev_env
-  export DATABASE_URL="${DATABASE_URL:-postgres://aerorf:aerorf@localhost:5432/aerorf}"
+  export DATABASE_URL="${DATABASE_URL:-postgres://aerorf:aerorf@localhost:5433/aerorf}"
   log "Executando migrations..."
 
   if [[ -d "${BACKEND_DIR}" && -f "${BACKEND_DIR}/package.json" ]]; then
@@ -84,7 +84,7 @@ cmd_migrate() {
 
 cmd_seed() {
   load_dev_env
-  export DATABASE_URL="postgres://aerorf:aerorf@localhost:5432/aerorf"
+  export DATABASE_URL="postgres://aerorf:aerorf@localhost:5433/aerorf"
 
   if [[ ! -d "${BACKEND_DIR}" || ! -f "${BACKEND_DIR}/package.json" ]]; then
     log_warn "Repo backend não encontrado em ${BACKEND_DIR} — pule seed ou clone aerorf-backend."

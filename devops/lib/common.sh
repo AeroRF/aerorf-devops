@@ -91,8 +91,8 @@ print_endpoints_dev() {
 ║  Grafana           http://localhost:3001  (admin/admin)      ║
 ║  Prometheus        http://localhost:9090                     ║
 ║  MinIO Console     http://localhost:9001  (aerorf/aerorf_secret)
-║  Postgres          localhost:5432 / PgBouncer :6432          ║
-║  Redis             localhost:6379                            ║
+║  Postgres          localhost:5433 / PgBouncer 127.0.0.1:6432   ║
+║  Redis             rede interna (sem porta no host)            ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Login demo: admin@aerorf.com.br / admin123                  ║
 ╚══════════════════════════════════════════════════════════════╝

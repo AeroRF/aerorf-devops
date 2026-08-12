@@ -31,7 +31,7 @@ docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile app
 
 if [[ -d "${BACKEND_DIR}" && -f "${BACKEND_DIR}/package.json" ]]; then
   log "Migrate/seed via backend..."
-  export DATABASE_URL="postgres://aerorf:aerorf@localhost:5432/aerorf"
+  export DATABASE_URL="postgres://aerorf:aerorf@localhost:5433/aerorf"
   (cd "${BACKEND_DIR}" && npm run migrate 2>/dev/null) || log "migrate skip (node ou já aplicado)"
   (cd "${BACKEND_DIR}" && npm run seed 2>/dev/null) || log "seed skip"
 fi
