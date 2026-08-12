@@ -68,9 +68,12 @@ jobs:
             -p "${SSH_PORT}" \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=30 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
             -o HostKeyAlgorithms=+ssh-rsa \
             "${USER}@${SSH_HOST}" \
-            "export GHCR_TOKEN='${GHCR_TOKEN}'; \
+            "export VPS_HOST='${SSH_HOST}'; \
+             export GHCR_TOKEN='${GHCR_TOKEN}'; \
              export GHCR_USER='${GHCR_USER}'; \
              export AERORF_BACKEND_TAG='${{ inputs.backend_tag }}'; \
              export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag }}'; \

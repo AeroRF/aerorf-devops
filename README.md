@@ -47,47 +47,28 @@ Libere no painel ou `ufw`:
 | 4000 | API (opcional se usar proxy `/api/v1` no front) |
 | 22 | SSH |
 
-### 4. GitHub Actions (deploy automático — recomendado)
+### 4. Deploy — somente GitHub Actions (sem SSH manual)
 
-**Uma vez:** configure o environment **development** em  
-https://github.com/AeroRF/aerorf-devops/settings/environments
+**Setup único** (environment `development` + secrets SSH/GHCR) — ver seção abaixo se ainda não configurou.
 
-#### 4.1 Chave SSH só para Actions (no seu Mac)
+1. Cancele runs antigos/travados em Actions, se houver.
+2. https://github.com/AeroRF/aerorf-devops/actions/workflows/deploy-development.yml
+3. **Run workflow** → branch `main` → target **compose-ssh** → tags `latest`
 
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/aerorf_deploy -N "" -C "github-actions-aerorf"
-cat ~/.ssh/aerorf_deploy.pub
-```
+O pipeline faz tudo no VPS: git pull, JWT, CORS, PgBouncer (SCRAM), pull GHCR, API/Web, migrate, seed e health check.
 
-No VPS (como root):
+**Não é necessário** rodar comandos manualmente no VPS após os secrets configurados.
 
-```bash
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-echo "COLE_A_PUBLIC_KEY_aqui" >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-```
-
-#### 4.2 Secrets no environment `development`
+#### Secrets (environment `development`)
 
 | Secret | Valor |
 |---|---|
-| `DEV_SSH_HOST` | `143.95.222.78` (IP público HostGator) |
-| `DEV_SSH_PORT` | `22022` (HostGator usa porta não padrão; opcional — default no workflow) |
+| `DEV_SSH_HOST` | IP público HostGator |
+| `DEV_SSH_PORT` | `22022` (opcional) |
 | `DEV_SSH_USER` | `root` |
-| `DEV_SSH_KEY` | conteúdo de `~/.ssh/aerorf_deploy` (privada) |
-| `GHCR_TOKEN` | PAT GitHub com `read:packages` |
-| `GHCR_USER` | seu usuário GitHub (ex: `dsdouglas`) |
-
-PAT: GitHub → Settings → Developer settings → Personal access tokens → `read:packages`.
-
-#### 4.3 Disparar deploy
-
-1. https://github.com/AeroRF/aerorf-devops/actions/workflows/deploy-development.yml  
-2. **Run workflow**  
-3. `target`: **compose-ssh**  
-4. tags: **latest** (padrão)
-
-O workflow SSH no VPS, faz pull GHCR, sobe API/Web, migrate/seed e health check.
+| `DEV_SSH_KEY` | chave privada deploy |
+| `GHCR_TOKEN` | PAT `read:packages` |
+| `GHCR_USER` | usuário GitHub |
 
 ### URLs
 

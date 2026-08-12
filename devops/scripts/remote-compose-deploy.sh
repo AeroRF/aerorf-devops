@@ -36,6 +36,12 @@ ensure_jwt_keys() {
 
 ensure_env_dev() {
   [[ -f "${COMPOSE_DIR}/.env.dev" ]] || cp "${COMPOSE_DIR}/.env.dev.example" "${COMPOSE_DIR}/.env.dev"
+
+  # DATABASE_URL no .env.dev é só para migrate no host — API usa compose environment
+  if grep -q '^DATABASE_URL=' "${COMPOSE_DIR}/.env.dev" 2>/dev/null; then
+    sed -i 's|^DATABASE_URL=|# DATABASE_URL=host-only-removed-by-deploy |' "${COMPOSE_DIR}/.env.dev"
+  fi
+
   local vps_host="${VPS_HOST:-}"
   if [[ -z "${vps_host}" ]]; then
     vps_host="$(curl -fsSL --max-time 5 https://api.ipify.org 2>/dev/null || true)"
@@ -95,13 +101,13 @@ export AERORF_FRONTEND_TAG="${AERORF_FRONTEND_TAG:-latest}"
 
 log "Infra (Postgres, Redis, MinIO, observabilidade)..."
 compose_dev up -d \
-  postgres pgbouncer redis minio minio-init prometheus grafana loki promtail
+  postgres redis minio minio-init prometheus grafana loki promtail
+
+log "PgBouncer (force-recreate — AUTH scram-sha-256)..."
+compose_dev up -d --force-recreate pgbouncer
+sleep 5
 
 run_migrate_if_needed
-
-log "Reiniciando PgBouncer (sincronizar com Postgres)..."
-compose_dev restart pgbouncer
-sleep 3
 
 log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
 compose_dev --profile apps pull api web
