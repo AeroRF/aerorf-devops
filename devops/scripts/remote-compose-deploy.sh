@@ -83,6 +83,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/003_aviation.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/004_caminhoes.sql" ]]; then
+    local tr_tables
+    tr_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='trucks';" \
+      2>/dev/null || echo 0)"
+    if [[ "${tr_tables}" -eq 0 ]]; then
+      log "Aplicando migration caminhões (004)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/004_caminhoes.sql"
+    fi
+  fi
 }
 
 run_seed() {
