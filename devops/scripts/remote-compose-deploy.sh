@@ -15,8 +15,12 @@ ensure_devops_repo() {
     mkdir -p "$(dirname "${DEVOPS_DIR}")"
     git clone https://github.com/AeroRF/aerorf-devops.git "${DEVOPS_DIR}"
   fi
-  log "Atualizando aerorf-devops..."
-  git -C "${DEVOPS_DIR}" pull --ff-only origin main
+  log "Atualizando aerorf-devops (origin/main)..."
+  git -C "${DEVOPS_DIR}" fetch origin main
+  if [[ -n "$(git -C "${DEVOPS_DIR}" status --porcelain 2>/dev/null)" ]]; then
+    log "Descartando alterações locais — deploy usa versão publicada no GitHub."
+  fi
+  git -C "${DEVOPS_DIR}" reset --hard origin/main
 }
 
 ensure_jwt_keys() {
