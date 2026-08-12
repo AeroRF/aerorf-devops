@@ -10,6 +10,11 @@ log() { printf '[deploy] %s\n' "$*"; }
 
 [[ -d "${COMPOSE_DIR}" ]] || { log "Repo devops não encontrado em ${DEVOPS_DIR}"; exit 1; }
 
+if [[ -d "${DEVOPS_DIR}/.git" ]]; then
+  log "Atualizando aerorf-devops..."
+  git -C "${DEVOPS_DIR}" pull --ff-only origin main 2>/dev/null || true
+fi
+
 log "Login GHCR..."
 echo "${GHCR_TOKEN:?GHCR_TOKEN required}" | docker login ghcr.io -u "${GHCR_USER:?GHCR_USER required}" --password-stdin
 
@@ -29,11 +34,15 @@ docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile app
 log "Subindo API + Web..."
 docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps up -d api web
 
-if [[ -d "${BACKEND_DIR}" && -f "${BACKEND_DIR}/package.json" ]]; then
+if [[ -d "${BACKEND_DIR}" && -f "${BACKEND_DIR}/package.json" ]] && command -v node >/dev/null 2>&1; then
   log "Migrate/seed via backend..."
   export DATABASE_URL="postgres://aerorf:aerorf@localhost:5433/aerorf"
-  (cd "${BACKEND_DIR}" && npm run migrate 2>/dev/null) || log "migrate skip (node ou já aplicado)"
+  (cd "${BACKEND_DIR}" && npm run migrate 2>/dev/null) || log "migrate skip (já aplicado ou node indisponível)"
   (cd "${BACKEND_DIR}" && npm run seed 2>/dev/null) || log "seed skip"
+else
+  log "Seed SQL demo (sem Node/backend)..."
+  docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+    < "${COMPOSE_DIR}/migrations/002_seed_demo.sql" 2>/dev/null || log "seed SQL skip"
 fi
 
 log "Aguardando API..."
