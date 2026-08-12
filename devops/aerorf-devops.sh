@@ -33,6 +33,7 @@ Uso:
   aerorf-devops.sh migrate                              Executa migrations (dev)
   aerorf-devops.sh validate <dev|prod>                  Valida pré-requisitos e config
   aerorf-devops.sh k8s <validate|apply>                 Kubernetes (prod)
+  aerorf-devops.sh mirror [--check]                   Espelha monorepo → repos-split/
   aerorf-devops.sh help
 
 Ambientes:
@@ -104,6 +105,9 @@ main() {
         apply)    k8s_apply ;;
         *)        die "Subcomando k8s inválido: ${sub}" ;;
       esac
+      ;;
+    mirror)
+      bash "${SCRIPT_DIR}/scripts/mirror-repos-split.sh" "$@"
       ;;
     help|-h|--help) usage ;;
     *)

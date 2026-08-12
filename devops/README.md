@@ -10,24 +10,24 @@ Scripts para instalar e operar a infraestrutura conforme a arquitetura:
 ## Início rápido
 
 ```bash
-chmod +x infra/devops/aerorf-devops.sh
+chmod +x devops/aerorf-devops.sh
 
 # Instalação completa DEV (recomendado na primeira vez)
-./infra/devops/aerorf-devops.sh install dev
+./devops/aerorf-devops.sh install dev
 
 # DEV com apps locais (só infra no Docker)
-./infra/devops/aerorf-devops.sh install dev --local-apps
+./devops/aerorf-devops.sh install dev --local-apps
 
 # Scaffold PROD (gera .env.prod, build, valida)
-./infra/devops/aerorf-devops.sh install prod
+./devops/aerorf-devops.sh install prod
 ```
 
-Via npm (raiz do monorepo):
+Via npm (raiz do monorepo local):
 
 ```bash
 npm run devops:install:dev
 npm run devops:up:dev
-npm run devops:status
+npm run devops:mirror
 ```
 
 ## Comandos
@@ -44,25 +44,45 @@ npm run devops:status
 | `logs dev api` | Logs de um serviço |
 | `seed` / `migrate` | Banco dev |
 | `validate dev\|prod` | Checagens |
-| `k8s validate\|apply` | Manifests em `infra/k8s/` |
+| `k8s validate\|apply` | Manifests em `k8s/` |
+| `mirror [--check]` | Espelha monorepo → `repos-split/` (requer clones irmãos) |
+
+## Espelhamento monorepo → GitHub
+
+Antes de push/deploy, sincronize o código dos repos split:
+
+```bash
+# No monorepo (recomendado)
+npm run devops:mirror
+# ou dry-run
+npm run devops:mirror:check
+
+# A partir deste repo (monorepo em ../..)
+AERORF_MONOREPO_ROOT=/caminho/AeroRF_MONOREPO ./devops/scripts/mirror-repos-split.sh
+```
+
+O script **não** copia Dockerfiles nem CI — cada repo split tem estrutura própria.
 
 ## Estrutura
 
 ```text
-infra/devops/
+devops/
 ├── aerorf-devops.sh      # CLI principal
+├── scripts/
+│   ├── mirror-repos-split.sh
+│   └── remote-compose-deploy.sh
 └── lib/
-    ├── common.sh         # Paths, logs, helpers
-    ├── check.sh          # Pré-requisitos e validação
-    ├── init.sh           # .env, JWT, npm build
-    ├── dev.sh            # Ambiente desenvolvimento
-    ├── prod.sh           # Ambiente produção (apps only)
-    └── k8s.sh            # Kubernetes
+    ├── common.sh
+    ├── check.sh
+    ├── init.sh
+    ├── dev.sh
+    ├── prod.sh
+    └── k8s.sh
 ```
 
 ## Arquivos de ambiente
 
-- `infra/compose/.env.dev` — gerado de `.env.dev.example` (serviços locais)
-- `infra/compose/.env.prod` — gerado de `.env.prod.example` (hosts externos)
+- `compose/.env.dev` — gerado de `.env.dev.example` (serviços locais)
+- `compose/.env.prod` — gerado de `.env.prod.example` (hosts externos)
 
-Nunca commite secrets de produção. JWT dev fica em `infra/keys/` (gitignored em prod real).
+Nunca commite secrets de produção. JWT dev fica em `keys/` (gitignored em prod real).
