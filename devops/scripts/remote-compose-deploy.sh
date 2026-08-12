@@ -97,8 +97,8 @@ run_migrate_if_needed
 log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
 docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps pull api web
 
-log "Subindo API + Web..."
-docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps up -d api web
+log "Subindo API + Web (force-recreate + pull)..."
+docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps up -d --force-recreate --pull always api web
 
 run_seed
 
