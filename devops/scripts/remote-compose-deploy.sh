@@ -280,6 +280,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/017_telemetry_storage.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/018_user_invites.sql" ]]; then
+    local user_invites_table
+    user_invites_table="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='user_invites';" \
+      2>/dev/null || echo 0)"
+    if [[ "${user_invites_table}" -eq 0 ]]; then
+      log "Aplicando migration convites de usuário (018)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/018_user_invites.sql"
+    fi
+  fi
 }
 
 run_seed() {
