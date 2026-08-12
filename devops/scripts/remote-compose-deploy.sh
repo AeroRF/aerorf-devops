@@ -247,6 +247,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/014_aviation_transfer_invites.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/015_aviation_documents_versions.sql" ]]; then
+    local doc_version_col
+    doc_version_col="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='aviation_documents' AND column_name='version';" \
+      2>/dev/null || echo 0)"
+    if [[ "${doc_version_col}" -eq 0 ]]; then
+      log "Aplicando migration versionamento documentos (015)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/015_aviation_documents_versions.sql"
+    fi
+  fi
 }
 
 run_seed() {
