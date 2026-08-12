@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Notificação Slack — CI/CD AeroRF
+# Notificação Slack — CI/CD AeroRF (mensagens legíveis com blocks)
 set -euo pipefail
 
 STATUS="${1:-unknown}"
@@ -19,14 +19,44 @@ case "${STATUS}" in
   started) EMOJI="🚀" ;;
 esac
 
-export EMOJI TITLE BODY SLACK_WEBHOOK_URL="${WEBHOOK}"
+export EMOJI TITLE BODY STATUS SLACK_WEBHOOK_URL="${WEBHOOK}"
 python3 <<'PY'
-import json, os, urllib.request
+import json
+import os
+import urllib.request
+
 emoji = os.environ.get("EMOJI", "")
 title = os.environ.get("TITLE", "AeroRF")
-body = os.environ.get("BODY", "")
-text = f"{emoji} *{title}*\n{body}"
-payload = json.dumps({"text": text}).encode()
+body = os.environ.get("BODY", "").replace("\\n", "\n")
+status = os.environ.get("STATUS", "unknown")
+
+fields = []
+for line in body.strip().splitlines():
+    line = line.strip()
+    if not line:
+        continue
+    if ":" in line:
+        key, val = line.split(":", 1)
+        fields.append({"type": "mrkdwn", "text": f"*{key.strip()}*\n`{val.strip()}`"})
+    else:
+        fields.append({"type": "mrkdwn", "text": line})
+
+blocks = [
+    {
+        "type": "header",
+        "text": {"type": "plain_text", "text": f"{emoji} {title}", "emoji": True},
+    },
+    {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": f"*Status:* `{status}`"}],
+    },
+]
+
+if fields:
+    for i in range(0, len(fields), 10):
+        blocks.append({"type": "section", "fields": fields[i : i + 10]})
+
+payload = json.dumps({"blocks": blocks}).encode()
 req = urllib.request.Request(
     os.environ["SLACK_WEBHOOK_URL"],
     data=payload,

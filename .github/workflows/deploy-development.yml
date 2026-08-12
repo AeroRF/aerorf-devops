@@ -97,8 +97,16 @@ jobs:
           chmod +x devops/scripts/slack-notify.sh
           STATUS="${{ job.status }}"
           HOST="${{ secrets.DEV_SSH_HOST }}"
-          devops/scripts/slack-notify.sh "${STATUS}" "Deploy DevOps (VPS)" \
-            "Repo: aerorf-devops\nHost: ${HOST}\nBackend: ${{ inputs.backend_tag || 'latest' }}\nFrontend: ${{ inputs.frontend_tag || 'latest' }}\nCommit: ${{ github.sha }}\nStatus: ${STATUS}"
+          BODY=$(cat <<EOF
+          Repo: aerorf-devops
+          Host: ${HOST}
+          Backend: ${{ inputs.backend_tag || 'latest' }}
+          Frontend: ${{ inputs.frontend_tag || 'latest' }}
+          Commit: ${{ github.sha }}
+          Grafana: http://${HOST}:3001
+          EOF
+          )
+          devops/scripts/slack-notify.sh "${STATUS}" "Deploy DevOps (VPS)" "${BODY}"
 
       - name: Health check no VPS
         if: success()
@@ -113,10 +121,11 @@ jobs:
             -o StrictHostKeyChecking=no \
             -o HostKeyAlgorithms=+ssh-rsa \
             "${USER}@${SSH_HOST}" \
-            "curl -sf http://127.0.0.1:4000/api/v1/health; echo; curl -sf http://127.0.0.1:3000/api/health; echo"
+            "curl -sf http://127.0.0.1:4000/api/v1/health; echo; curl -sf http://127.0.0.1:3000/api/health; echo; curl -sf http://127.0.0.1:3001/api/health; echo"
           echo ""
-          echo "Web:  http://${SSH_HOST}:3000"
-          echo "API:  http://${SSH_HOST}:4000/api/v1/health"
+          echo "Web:     http://${SSH_HOST}:3000"
+          echo "API:     http://${SSH_HOST}:4000/api/v1/health"
+          echo "Grafana: http://${SSH_HOST}:3001  (admin / ver secret GRAFANA_ADMIN_PASSWORD)"
 
   deploy-kubernetes:
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'kubernetes'

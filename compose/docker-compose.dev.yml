@@ -243,17 +243,24 @@ services:
       - aerorf-net
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.3.0
+    container_name: aerorf_grafana
+    restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/aerorf-overview.json
     volumes:
       - grafana_data:/var/lib/grafana
       - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "3001:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q ok || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       - prometheus
       - loki

@@ -186,6 +186,16 @@ compose_dev up -d \
   prometheus alertmanager grafana loki promtail \
   node-exporter postgres-exporter redis-exporter
 
+log "Grafana — force-recreate (garante container saudável)..."
+compose_dev up -d --force-recreate grafana
+sleep 8
+if curl -sf http://127.0.0.1:3001/api/health >/dev/null 2>&1; then
+  log "Grafana health OK (:3001)"
+else
+  log "Grafana ainda inicializando — logs:"
+  docker logs aerorf_grafana --tail 25 2>&1 || true
+fi
+
 log "PgBouncer (force-recreate — AUTH scram-sha-256)..."
 compose_dev up -d --force-recreate pgbouncer
 sleep 5
