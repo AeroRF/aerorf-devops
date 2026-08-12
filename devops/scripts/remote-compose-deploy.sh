@@ -45,8 +45,13 @@ ensure_env_dev() {
   fi
   if [[ -n "${vps_host}" ]]; then
     sed -i "s/SEU_IP_OU_DOMINIO/${vps_host}/g" "${COMPOSE_DIR}/.env.dev"
+    sed -i "s|^CORS_ORIGIN=.*|CORS_ORIGIN=http://${vps_host}:3000|" "${COMPOSE_DIR}/.env.dev"
     log "CORS_ORIGIN → http://${vps_host}:3000"
   fi
+}
+
+compose_dev() {
+  docker compose --project-name aerorf-dev --env-file "${COMPOSE_DIR}/.env.dev" -f "${COMPOSE_DIR}/docker-compose.dev.yml" "$@"
 }
 
 run_migrate_if_needed() {
@@ -89,32 +94,46 @@ export AERORF_BACKEND_TAG="${AERORF_BACKEND_TAG:-latest}"
 export AERORF_FRONTEND_TAG="${AERORF_FRONTEND_TAG:-latest}"
 
 log "Infra (Postgres, Redis, MinIO, observabilidade)..."
-docker compose --project-name aerorf-dev -f docker-compose.dev.yml up -d \
+compose_dev up -d \
   postgres pgbouncer redis minio minio-init prometheus grafana loki promtail
 
 run_migrate_if_needed
 
+log "Reiniciando PgBouncer (sincronizar com Postgres)..."
+compose_dev restart pgbouncer
+sleep 3
+
 log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
-docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps pull api web
+compose_dev --profile apps pull api web
 
 log "Subindo API + Web (force-recreate + pull)..."
-docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps up -d --force-recreate --pull always api web
+compose_dev --profile apps up -d --force-recreate --pull always api web
 
 run_seed
 
 log "Aguardando API..."
-for _ in $(seq 1 45); do
-  curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null && break
+for i in $(seq 1 45); do
+  if curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null 2>&1; then
+    log "API health OK (tentativa ${i})"
+    break
+  fi
+  if [[ "${i}" -eq 1 || $((i % 5)) -eq 0 ]]; then
+    curl -s http://127.0.0.1:4000/api/v1/health 2>/dev/null | head -c 200 || true
+    echo ""
+  fi
   sleep 2
 done
 
-curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null || {
-  log "API não respondeu:"
+if ! curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null; then
+  log "API health falhou — resposta:"
+  curl -s http://127.0.0.1:4000/api/v1/health || true
+  echo ""
   docker logs aerorf_api --tail 40 2>&1 || true
+  docker logs aerorf_pgbouncer --tail 20 2>&1 || true
   exit 1
-}
+fi
 
 curl -sf http://127.0.0.1:3000/api/health >/dev/null || log "Web ainda inicializando — docker logs aerorf_web"
 
 log "Deploy concluído."
-docker compose --project-name aerorf-dev -f docker-compose.dev.yml ps
+compose_dev --profile apps ps
