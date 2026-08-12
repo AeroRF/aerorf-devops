@@ -16,6 +16,7 @@ cmd_install_dev() {
     log "Modo --local-apps: subindo apenas infra (sem containers api/web)..."
     compose_dev up -d postgres pgbouncer redis minio minio-init prometheus grafana loki promtail
   else
+    ghcr_login_if_needed
     log "Subindo stack com imagens GHCR (profile apps)..."
     compose_dev --profile apps up -d
   fi

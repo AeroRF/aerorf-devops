@@ -37,6 +37,15 @@ load_dev_env() {
   BACKEND_DIR="${AERORF_BACKEND_DIR:-${BACKEND_DIR}}"
 }
 
+ghcr_login_if_needed() {
+  if [[ -n "${GHCR_TOKEN:-}" ]]; then
+    log "Login GHCR (${GHCR_USER:-git})..."
+    echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER:-git}" --password-stdin
+    return 0
+  fi
+  log_warn "GHCR_TOKEN não definido — pull pode falhar se imagens forem privadas."
+}
+
 wait_for_postgres() {
   local host="${1:-localhost}"
   local port="${2:-5432}"

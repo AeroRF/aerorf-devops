@@ -1,0 +1,93 @@
+name: Deploy Development
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_tag:
+        description: Tag da imagem backend no GHCR
+        default: latest
+        type: string
+      frontend_tag:
+        description: Tag da imagem frontend no GHCR
+        default: latest
+        type: string
+      target:
+        description: Destino do deploy
+        default: kubernetes
+        type: choice
+        options:
+          - kubernetes
+          - compose-ssh
+
+jobs:
+  deploy-kubernetes:
+    if: inputs.target == 'kubernetes'
+    runs-on: ubuntu-latest
+    environment: development
+    env:
+      NAMESPACE: aerorf-dev
+      REGISTRY: ghcr.io/aerorf
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          if [[ -z "${{ secrets.KUBE_CONFIG }}" ]]; then
+            echo "::error::Secret KUBE_CONFIG não configurado no environment development"
+            exit 1
+          fi
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl cluster-info
+
+      - name: Namespace e pull secret GHCR
+        run: |
+          kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-credentials \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
+            --namespace="${NAMESPACE}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply manifests development
+        run: kubectl apply -f k8s/aerorf-dev.yaml
+
+      - name: Update images and rollout
+        run: |
+          kubectl set image deployment/aerorf-api \
+            api="${REGISTRY}/aerorf-backend:${{ inputs.backend_tag }}" \
+            -n "${NAMESPACE}"
+          kubectl set image deployment/aerorf-web \
+            web="${REGISTRY}/aerorf-frontend:${{ inputs.frontend_tag }}" \
+            -n "${NAMESPACE}"
+          kubectl rollout status deployment/aerorf-api -n "${NAMESPACE}" --timeout=180s
+          kubectl rollout status deployment/aerorf-web -n "${NAMESPACE}" --timeout=180s
+          kubectl get pods,svc -n "${NAMESPACE}"
+
+  deploy-compose-ssh:
+    if: inputs.target == 'compose-ssh'
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH (Compose + GHCR)
+        run: |
+          if [[ -z "${{ secrets.DEV_SSH_HOST }}" || -z "${{ secrets.DEV_SSH_KEY }}" ]]; then
+            echo "::error::Configure secrets DEV_SSH_HOST, DEV_SSH_USER e DEV_SSH_KEY no environment development"
+            exit 1
+          fi
+          install -m 600 /dev/stdin ~/.ssh/id_deploy <<EOF
+          ${{ secrets.DEV_SSH_KEY }}
+          EOF
+          ssh -o StrictHostKeyChecking=no \
+            "${{ secrets.DEV_SSH_USER || 'deploy' }}@${{ secrets.DEV_SSH_HOST }}" \
+            "export GHCR_TOKEN='${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}'; \
+             export GHCR_USER='${{ github.actor }}'; \
+             export AERORF_BACKEND_TAG='${{ inputs.backend_tag }}'; \
+             export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag }}'; \
+             bash -s" < devops/scripts/remote-compose-deploy.sh

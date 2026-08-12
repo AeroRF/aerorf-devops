@@ -1,59 +1,74 @@
 # aerorf-devops
 
-Infraestrutura AeroRF — Docker Compose, Kubernetes, observabilidade, CLI DevOps.
+Infraestrutura AeroRF — Docker Compose, Kubernetes, observabilidade e CLI DevOps.
 
 Repositório: https://github.com/AeroRF/aerorf-devops
 
-## Repositórios relacionados
+## Repositórios
 
 | Repo | Função |
 |---|---|
-| [aerorf-packages](https://github.com/AeroRF/aerorf-packages) | Pacotes npm compartilhados |
-| [aerorf-backend](https://github.com/AeroRF/aerorf-backend) | API REST |
-| [aerorf-frontend](https://github.com/AeroRF/aerorf-frontend) | Next.js |
+| [aerorf-packages](https://github.com/AeroRF/aerorf-packages) | Pacotes npm |
+| [aerorf-backend](https://github.com/AeroRF/aerorf-backend) | API → `ghcr.io/aerorf/aerorf-backend` |
+| [aerorf-frontend](https://github.com/AeroRF/aerorf-frontend) | Web → `ghcr.io/aerorf/aerorf-frontend` |
+
+## Deploy development
+
+Workflow **Deploy Development** (manual): Actions → Deploy Development → Run workflow.
+
+### Opção A — VPS + Docker Compose (recomendado para dev)
+
+1. No servidor: clone `aerorf-devops`, instale Docker, gere JWT em `keys/`
+2. GitHub → **aerorf-devops** → Settings → Environments → `development` → secrets:
+
+| Secret | Conteúdo |
+|---|---|
+| `DEV_SSH_HOST` | IP/hostname do servidor |
+| `DEV_SSH_USER` | usuário SSH (ex: `deploy`) |
+| `DEV_SSH_KEY` | chave privada SSH |
+| `GHCR_TOKEN` | PAT com `read:packages` (se imagens privadas) |
+
+3. Run workflow → target **compose-ssh** → tags `latest`
+
+No servidor, antes do primeiro deploy:
+
+```bash
+git clone git@github.com:AeroRF/aerorf-devops.git ~/aerorf/aerorf-devops
+cd ~/aerorf/aerorf-devops && ./devops/aerorf-devops.sh install dev --local-apps
+# clone backend ao lado para migrate/seed
+```
+
+### Opção B — Kubernetes (namespace `aerorf-dev`)
+
+Secrets no environment `development`:
+
+| Secret | Conteúdo |
+|---|---|
+| `KUBE_CONFIG` | `cat ~/.kube/config \| base64` |
+
+Antes do deploy, edite `k8s/aerorf-dev.yaml` (JWT e DATABASE_URL reais) ou aplique secret via kubectl.
+
+Run workflow → target **kubernetes**.
+
+NodePorts padrão: API **30040**, Web **30080**.
+
+### Deploy local com imagens GHCR
+
+```bash
+export GHCR_TOKEN=<PAT read:packages>
+export GHCR_USER=<seu-user-github>
+./devops/aerorf-devops.sh install dev
+```
 
 ## CI
 
-Workflow `devops-ci.yml`: valida compose dev/prod + **kubeconform** nos manifests K8s (sem cluster; ignora schema de CRDs como `ServiceMonitor`).
+- `devops-ci.yml` — valida compose + kubeconform
+- `deploy-development.yml` — deploy manual (compose-ssh ou kubernetes)
 
-## Dev local (híbrido)
-
-Clone os 4 repos no mesmo diretório pai (`~/aerorf/`).
-
-```bash
-chmod +x devops/aerorf-devops.sh
-./devops/aerorf-devops.sh install dev --local-apps
-```
-
-Migrate/seed rodam no repo `../aerorf-backend` (variável `AERORF_BACKEND_DIR` em `compose/.env.dev`).
-
-## Dev via GHCR (profile apps)
-
-Após CI publicar imagens backend/frontend:
+## CLI
 
 ```bash
-./devops/aerorf-devops.sh install dev   # sobe infra + ghcr.io/aerorf/aerorf-*
+./devops/aerorf-devops.sh install dev --local-apps  # infra only
+./devops/aerorf-devops.sh install dev              # infra + GHCR apps
+./devops/aerorf-devops.sh k8s validate
 ```
-
-## Imagens
-
-- `ghcr.io/aerorf/aerorf-backend:latest`
-- `ghcr.io/aerorf/aerorf-frontend:latest`
-
-## Comandos CLI
-
-| Comando | Descrição |
-|---|---|
-| `install dev --local-apps` | Infra Docker; apps via npm nos repos |
-| `install dev` | Infra + apps GHCR (profile `apps`) |
-| `migrate` / `seed` | Delegado ao aerorf-backend |
-| `k8s validate` | Dry-run dos manifests |
-| `k8s apply` | Deploy em cluster configurado |
-
-## Pipeline → deploy (próximo passo)
-
-1. CI verde nos 4 repos
-2. GitHub → Settings → Actions → General → **Workflow permissions: Read and write**
-3. GHCR: tornar packages visíveis para repos privados backend/frontend
-4. Secret `KUBE_CONFIG` (base64 do kubeconfig) no environment `development`
-5. Substituir job de deploy placeholder por `kubectl set image` real
