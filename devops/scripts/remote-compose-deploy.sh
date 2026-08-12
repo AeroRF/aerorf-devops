@@ -105,6 +105,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/005_combustiveis.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/006_estoque.sql" ]]; then
+    local stock_tables
+    stock_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='stock_products';" \
+      2>/dev/null || echo 0)"
+    if [[ "${stock_tables}" -eq 0 ]]; then
+      log "Aplicando migration estoque (006)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/006_estoque.sql"
+    fi
+  fi
 }
 
 run_seed() {
