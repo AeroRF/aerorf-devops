@@ -15,4 +15,33 @@ scrape_configs:
         refresh_interval: 5s
     relabel_configs:
       - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
         target_label: container
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/aerorf_(api|web|postgres|redis|minio).*'
+        target_label: service
+        replacement: '$1'
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            event: event
+            status: status
+            method: method
+            path: path
+            tenantId: tenantId
+            requestId: requestId
+      - labels:
+          level:
+          event:
+      - match:
+          selector: '{level="error"}'
+          stages:
+            - static_labels:
+                alert_candidate: "true"
+      - match:
+          selector: '{event="http_error"}'
+          stages:
+            - static_labels:
+                alert_candidate: "true"

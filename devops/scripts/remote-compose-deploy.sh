@@ -54,6 +54,15 @@ ensure_env_dev() {
     sed -i "s|^CORS_ORIGIN=.*|CORS_ORIGIN=http://${vps_host}:3000|" "${COMPOSE_DIR}/.env.dev"
     log "CORS_ORIGIN → http://${vps_host}:3000"
   fi
+
+  if [[ -n "${ALERT_WEBHOOK_URL:-}" ]]; then
+    if grep -q '^ALERT_WEBHOOK_URL=' "${COMPOSE_DIR}/.env.dev" 2>/dev/null; then
+      sed -i "s|^ALERT_WEBHOOK_URL=.*|ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}|" "${COMPOSE_DIR}/.env.dev"
+    else
+      echo "ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}" >> "${COMPOSE_DIR}/.env.dev"
+    fi
+    log "ALERT_WEBHOOK_URL configurado para Alertmanager"
+  fi
 }
 
 compose_dev() {
@@ -154,9 +163,11 @@ cd "${COMPOSE_DIR}"
 export AERORF_BACKEND_TAG="${AERORF_BACKEND_TAG:-latest}"
 export AERORF_FRONTEND_TAG="${AERORF_FRONTEND_TAG:-latest}"
 
-log "Infra (Postgres, Redis, MinIO, observabilidade)..."
+log "Infra (Postgres, Redis, MinIO, observabilidade + exporters)..."
 compose_dev up -d \
-  postgres redis minio minio-init prometheus grafana loki promtail
+  postgres redis minio minio-init \
+  prometheus alertmanager grafana loki promtail \
+  node-exporter postgres-exporter redis-exporter
 
 log "PgBouncer (force-recreate — AUTH scram-sha-256)..."
 compose_dev up -d --force-recreate pgbouncer

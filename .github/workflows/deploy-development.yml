@@ -22,6 +22,7 @@ on:
     branches: [main]
     paths:
       - 'compose/**'
+      - 'observability/**'
       - 'devops/**'
       - '.github/workflows/deploy-development.yml'
 
@@ -83,6 +84,7 @@ jobs:
              export GHCR_USER='${GHCR_USER}'; \
              export AERORF_BACKEND_TAG='${{ inputs.backend_tag || 'latest' }}'; \
              export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag || 'latest' }}'; \
+             export ALERT_WEBHOOK_URL='${{ secrets.ALERT_WEBHOOK_URL }}'; \
              bash -s" < devops/scripts/remote-compose-deploy.sh
 
       - name: Health check no VPS

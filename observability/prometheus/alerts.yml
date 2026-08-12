@@ -1,0 +1,153 @@
+# Regras com threshold baixo — qualquer erro relevante dispara alerta em dev.
+# Prod/homolog usam as mesmas regras com external_labels.environment distinto.
+
+groups:
+  - name: aerorf-api-errors
+    rules:
+      - alert: AeroRFHttp5xx
+        expr: increase(http_requests_total{status_class="5xx"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Erro HTTP 5xx na API"
+          description: "{{ $value }} respostas 5xx nos últimos 5 min (rota {{ $labels.route }})."
+
+      - alert: AeroRFHttp4xxSpike
+        expr: increase(http_requests_total{status_class="4xx"}[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pico de erros HTTP 4xx"
+          description: "{{ $value }} respostas 4xx nos últimos 5 min."
+
+      - alert: AeroRFApplicationErrors
+        expr: increase(application_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Erro de aplicação registrado"
+          description: "Módulo {{ $labels.module }} tipo {{ $labels.type }}."
+
+  - name: aerorf-auth
+    rules:
+      - alert: AeroRFLoginFailures
+        expr: increase(auth_login_failures_total[5m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Falhas de login"
+          description: "{{ $value }} tentativas falhas (motivo {{ $labels.reason }})."
+
+      - alert: AeroRFRefreshFailures
+        expr: increase(auth_refresh_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Falha de refresh token"
+          description: "{{ $value }} refresh tokens inválidos nos últimos 5 min."
+
+  - name: aerorf-storage
+    rules:
+      - alert: AeroRFStorageErrors
+        expr: increase(storage_operation_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Erro de storage/upload"
+          description: "Operação {{ $labels.operation }} falhou."
+
+  - name: aerorf-web-proxy
+    rules:
+      - alert: AeroRFProxyErrors
+        expr: increase(proxy_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Erro no proxy Next.js → API"
+          description: "Motivo {{ $labels.reason }}."
+
+      - alert: AeroRFProxy5xx
+        expr: increase(proxy_requests_total{status_class="5xx"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Proxy retornou 5xx"
+          description: "{{ $value }} respostas 5xx via proxy."
+
+  - name: aerorf-availability
+    rules:
+      - alert: AeroRFApiDown
+        expr: up{job="aerorf-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API indisponível para scrape Prometheus"
+
+      - alert: AeroRFWebDown
+        expr: up{job="aerorf-web"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Web indisponível para scrape Prometheus"
+
+      - alert: AeroRFPostgresExporterDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres exporter offline"
+
+      - alert: AeroRFRedisExporterDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis exporter offline"
+
+  - name: aerorf-host-resources
+    rules:
+      - alert: AeroRFHighCpu
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 70
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU do servidor acima de 70%"
+          description: "Uso atual ~{{ $value | printf \"%.0f\" }}%."
+
+      - alert: AeroRFHighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 75
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memória do servidor acima de 75%"
+
+      - alert: AeroRFLowDisk
+        expr: (node_filesystem_avail_bytes{mountpoint="/",fstype!="rootfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="rootfs"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disco abaixo de 15% livre"
+
+      - alert: AeroRFPostgresConnectionsHigh
+        expr: pg_stat_activity_count > 80
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Conexões PostgreSQL elevadas"
+          description: "{{ $value }} conexões ativas."

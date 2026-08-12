@@ -1,11 +1,10 @@
 # =============================================================================
-# AeroRF — Desenvolvimento
-# Infra padrão: postgres, redis, minio, observabilidade
+# AeroRF — Desenvolvimento (VPS via pipeline aerorf-devops)
+# Infra padrão: postgres, redis, minio, observabilidade + exporters
 # Apps (profile apps): imagens GHCR — ghcr.io/aerorf/aerorf-backend|frontend
 #
-# Uso:
-#   docker compose -f compose/docker-compose.dev.yml up -d
-#   docker compose -f compose/docker-compose.dev.yml --profile apps up -d
+# Deploy: GitHub Actions deploy-development.yml (sem comandos locais)
+# Dados: volumes isolados project-name aerorf-dev — NÃO replicar em homolog/prod
 # =============================================================================
 
 networks:
@@ -63,7 +62,6 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    # Sem porta no host — evita conflito com Redis do SO (6379); API usa redis:6379 na rede interna
     networks:
       - aerorf-net
 
@@ -113,6 +111,7 @@ services:
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      COOKIE_SECURE: "false"
     volumes:
       - ../keys/jwt-private.pem:/run/secrets/jwt_private:ro
       - ../keys/jwt-public.pem:/run/secrets/jwt_public:ro
@@ -139,7 +138,6 @@ services:
     networks:
       - aerorf-net
 
-  # Encaminha localhost:4000 (rewrite/proxy do Next) → api:4000 na rede Docker
   web-api-proxy:
     profiles: ["apps"]
     image: alpine/socat
@@ -154,9 +152,65 @@ services:
     image: prom/prometheus:latest
     volumes:
       - ../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    depends_on:
+      - alertmanager
+    networks:
+      - aerorf-net
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-http://127.0.0.1:65534/skip}
+    volumes:
+      - ../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - sed "s|__ALERT_WEBHOOK_URL__|$$ALERT_WEBHOOK_URL|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - aerorf-net
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - aerorf-net
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgres://aerorf:aerorf@postgres:5432/aerorf?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "9187:9187"
+    networks:
+      - aerorf-net
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      - redis
+    ports:
+      - "9121:9121"
     networks:
       - aerorf-net
 
@@ -196,6 +250,7 @@ services:
     depends_on:
       - prometheus
       - loki
+      - alertmanager
     networks:
       - aerorf-net
 

@@ -1,13 +1,51 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: development
+    cluster: aerorf
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
 
 scrape_configs:
   - job_name: aerorf-api
     static_configs:
       - targets: ['api:4000']
+        labels:
+          service: api
     metrics_path: /metrics
 
   - job_name: aerorf-web
     static_configs:
       - targets: ['web:3000']
+        labels:
+          service: web
     metrics_path: /api/metrics
+
+  - job_name: node
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: host
+
+  - job_name: postgres
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: postgres
+
+  - job_name: redis
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: redis
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
