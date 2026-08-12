@@ -72,6 +72,17 @@ run_migrate_if_needed() {
   else
     log "Schema já presente — migrate skip."
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/003_aviation.sql" ]]; then
+    local av_tables
+    av_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='aviation_operators';" \
+      2>/dev/null || echo 0)"
+    if [[ "${av_tables}" -eq 0 ]]; then
+      log "Aplicando migration aviação (003)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/003_aviation.sql"
+    fi
+  fi
 }
 
 run_seed() {
