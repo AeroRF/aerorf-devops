@@ -47,18 +47,46 @@ Libere no painel ou `ufw`:
 | 4000 | API (opcional se usar proxy `/api/v1` no front) |
 | 22 | SSH |
 
-### 4. GitHub Actions (deploy automático)
+### 4. GitHub Actions (deploy automático — recomendado)
 
-Environment **development** em `aerorf-devops` → secrets:
+**Uma vez:** configure o environment **development** em  
+https://github.com/AeroRF/aerorf-devops/settings/environments
+
+#### 4.1 Chave SSH só para Actions (no seu Mac)
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/aerorf_deploy -N "" -C "github-actions-aerorf"
+cat ~/.ssh/aerorf_deploy.pub
+```
+
+No VPS (como root):
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+echo "COLE_A_PUBLIC_KEY_aqui" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+#### 4.2 Secrets no environment `development`
 
 | Secret | Valor |
 |---|---|
-| `DEV_SSH_HOST` | IP HostGator |
-| `DEV_SSH_USER` | `root` ou usuário SSH |
-| `DEV_SSH_KEY` | chave privada (par sem senha para Actions) |
-| `GHCR_TOKEN` | PAT `read:packages` |
+| `DEV_SSH_HOST` | IP público HostGator |
+| `DEV_SSH_USER` | `root` |
+| `DEV_SSH_KEY` | conteúdo de `~/.ssh/aerorf_deploy` (privada) |
+| `GHCR_TOKEN` | PAT GitHub com `read:packages` |
+| `GHCR_USER` | seu usuário GitHub (ex: `dsdouglas`) |
 
-Actions → **Deploy Development** → target **compose-ssh** → Run.
+PAT: GitHub → Settings → Developer settings → Personal access tokens → `read:packages`.
+
+#### 4.3 Disparar deploy
+
+1. https://github.com/AeroRF/aerorf-devops/actions/workflows/deploy-development.yml  
+2. **Run workflow**  
+3. `target`: **compose-ssh**  
+4. tags: **latest** (padrão)
+
+O workflow SSH no VPS, faz pull GHCR, sobe API/Web, migrate/seed e health check.
 
 ### URLs
 

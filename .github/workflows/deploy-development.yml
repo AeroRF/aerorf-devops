@@ -16,10 +16,71 @@ on:
         default: compose-ssh
         type: choice
         options:
-          - kubernetes
           - compose-ssh
+          - kubernetes
+
+permissions:
+  contents: read
 
 jobs:
+  deploy-compose-ssh:
+    if: inputs.target == 'compose-ssh'
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar secrets
+        run: |
+          if [[ -z "${{ secrets.DEV_SSH_HOST }}" ]]; then
+            echo "::error::Configure DEV_SSH_HOST no environment development"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.DEV_SSH_KEY }}" ]]; then
+            echo "::error::Configure DEV_SSH_KEY no environment development"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.GHCR_TOKEN }}" ]]; then
+            echo "::warning::GHCR_TOKEN ausente — usando GITHUB_TOKEN (pode falhar em imagens privadas)"
+          fi
+
+      - name: Deploy via SSH (Compose + GHCR)
+        env:
+          SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_USER || github.actor }}
+        run: |
+          install -m 600 /dev/stdin ~/.ssh/id_deploy <<EOF
+          ${{ secrets.DEV_SSH_KEY }}
+          EOF
+
+          USER="${SSH_USER:-root}"
+          echo "Conectando em ${USER}@${SSH_HOST}..."
+
+          ssh -i ~/.ssh/id_deploy \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            "${USER}@${SSH_HOST}" \
+            "export GHCR_TOKEN='${GHCR_TOKEN}'; \
+             export GHCR_USER='${GHCR_USER}'; \
+             export AERORF_BACKEND_TAG='${{ inputs.backend_tag }}'; \
+             export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag }}'; \
+             bash -s" < devops/scripts/remote-compose-deploy.sh
+
+      - name: Health check no VPS
+        if: success()
+        env:
+          SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEV_SSH_USER }}
+        run: |
+          USER="${SSH_USER:-root}"
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no "${USER}@${SSH_HOST}" \
+            "curl -sf http://127.0.0.1:4000/api/v1/health; echo; curl -sf http://127.0.0.1:3000/api/health; echo"
+          echo ""
+          echo "Web:  http://${SSH_HOST}:3000"
+          echo "API:  http://${SSH_HOST}:4000/api/v1/health"
+
   deploy-kubernetes:
     if: inputs.target == 'kubernetes'
     runs-on: ubuntu-latest
@@ -67,27 +128,3 @@ jobs:
           kubectl rollout status deployment/aerorf-api -n "${NAMESPACE}" --timeout=180s
           kubectl rollout status deployment/aerorf-web -n "${NAMESPACE}" --timeout=180s
           kubectl get pods,svc -n "${NAMESPACE}"
-
-  deploy-compose-ssh:
-    if: inputs.target == 'compose-ssh'
-    runs-on: ubuntu-latest
-    environment: development
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy via SSH (Compose + GHCR)
-        run: |
-          if [[ -z "${{ secrets.DEV_SSH_HOST }}" || -z "${{ secrets.DEV_SSH_KEY }}" ]]; then
-            echo "::error::Configure secrets DEV_SSH_HOST, DEV_SSH_USER e DEV_SSH_KEY no environment development"
-            exit 1
-          fi
-          install -m 600 /dev/stdin ~/.ssh/id_deploy <<EOF
-          ${{ secrets.DEV_SSH_KEY }}
-          EOF
-          ssh -o StrictHostKeyChecking=no \
-            "${{ secrets.DEV_SSH_USER || 'deploy' }}@${{ secrets.DEV_SSH_HOST }}" \
-            "export GHCR_TOKEN='${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}'; \
-             export GHCR_USER='${{ github.actor }}'; \
-             export AERORF_BACKEND_TAG='${{ inputs.backend_tag }}'; \
-             export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag }}'; \
-             bash -s" < devops/scripts/remote-compose-deploy.sh

@@ -1,19 +1,81 @@
 #!/usr/bin/env bash
-# Deploy/atualização no VPS (HostGator) — usa compose/ existente
+# Deploy/atualização no VPS (HostGator) — invocado via GitHub Actions (compose-ssh)
 set -euo pipefail
 
 DEVOPS_DIR="${DEVOPS_DIR:-$HOME/aerorf/aerorf-devops}"
 COMPOSE_DIR="${DEVOPS_DIR}/compose"
+KEYS_DIR="${DEVOPS_DIR}/keys"
 BACKEND_DIR="${AERORF_BACKEND_DIR:-$HOME/aerorf/aerorf-backend}"
 
 log() { printf '[deploy] %s\n' "$*"; }
 
-[[ -d "${COMPOSE_DIR}" ]] || { log "Repo devops não encontrado em ${DEVOPS_DIR}"; exit 1; }
-
-if [[ -d "${DEVOPS_DIR}/.git" ]]; then
+ensure_devops_repo() {
+  if [[ ! -d "${DEVOPS_DIR}/.git" ]]; then
+    log "Clonando aerorf-devops em ${DEVOPS_DIR}..."
+    mkdir -p "$(dirname "${DEVOPS_DIR}")"
+    git clone https://github.com/AeroRF/aerorf-devops.git "${DEVOPS_DIR}"
+  fi
   log "Atualizando aerorf-devops..."
-  git -C "${DEVOPS_DIR}" pull --ff-only origin main 2>/dev/null || true
-fi
+  git -C "${DEVOPS_DIR}" pull --ff-only origin main
+}
+
+ensure_jwt_keys() {
+  mkdir -p "${KEYS_DIR}"
+  if [[ -f "${KEYS_DIR}/jwt-private.pem" && -f "${KEYS_DIR}/jwt-public.pem" ]]; then
+    return 0
+  fi
+  log "Gerando chaves JWT..."
+  openssl genrsa -out "${KEYS_DIR}/jwt-private.pem" 2048 2>/dev/null
+  openssl rsa -in "${KEYS_DIR}/jwt-private.pem" -pubout -out "${KEYS_DIR}/jwt-public.pem" 2>/dev/null
+  chmod 600 "${KEYS_DIR}/jwt-private.pem"
+}
+
+ensure_env_dev() {
+  [[ -f "${COMPOSE_DIR}/.env.dev" ]] || cp "${COMPOSE_DIR}/.env.dev.example" "${COMPOSE_DIR}/.env.dev"
+  local vps_host="${VPS_HOST:-}"
+  if [[ -z "${vps_host}" ]]; then
+    vps_host="$(curl -fsSL --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+  fi
+  if [[ -z "${vps_host}" ]]; then
+    vps_host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  if [[ -n "${vps_host}" ]]; then
+    sed -i "s/SEU_IP_OU_DOMINIO/${vps_host}/g" "${COMPOSE_DIR}/.env.dev"
+    log "CORS_ORIGIN → http://${vps_host}:3000"
+  fi
+}
+
+run_migrate_if_needed() {
+  local tables
+  tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+    "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='users';" \
+    2>/dev/null || echo 0)"
+  if [[ "${tables}" -eq 0 ]]; then
+    log "Aplicando schema inicial..."
+    docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+      < "${COMPOSE_DIR}/migrations/001_initial.sql"
+  else
+    log "Schema já presente — migrate skip."
+  fi
+}
+
+run_seed() {
+  if [[ -d "${BACKEND_DIR}" && -f "${BACKEND_DIR}/package.json" ]] && command -v node >/dev/null 2>&1; then
+    log "Seed via aerorf-backend..."
+    export DATABASE_URL="postgres://aerorf:aerorf@localhost:5433/aerorf"
+    (cd "${BACKEND_DIR}" && npm run seed 2>/dev/null) && return 0
+  fi
+  log "Seed SQL demo..."
+  docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+    < "${COMPOSE_DIR}/migrations/002_seed_demo.sql"
+}
+
+ensure_devops_repo
+ensure_jwt_keys
+ensure_env_dev
+
+command -v docker >/dev/null 2>&1 || { log "Docker não encontrado no VPS."; exit 1; }
+docker info >/dev/null 2>&1 || { log "Docker daemon não está rodando."; exit 1; }
 
 log "Login GHCR..."
 echo "${GHCR_TOKEN:?GHCR_TOKEN required}" | docker login ghcr.io -u "${GHCR_USER:?GHCR_USER required}" --password-stdin
@@ -22,11 +84,11 @@ cd "${COMPOSE_DIR}"
 export AERORF_BACKEND_TAG="${AERORF_BACKEND_TAG:-latest}"
 export AERORF_FRONTEND_TAG="${AERORF_FRONTEND_TAG:-latest}"
 
-[[ -f .env.dev ]] || cp .env.dev.example .env.dev
-
 log "Infra (Postgres, Redis, MinIO, observabilidade)..."
 docker compose --project-name aerorf-dev -f docker-compose.dev.yml up -d \
   postgres pgbouncer redis minio minio-init prometheus grafana loki promtail
+
+run_migrate_if_needed
 
 log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
 docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps pull api web
@@ -34,16 +96,7 @@ docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile app
 log "Subindo API + Web..."
 docker compose --project-name aerorf-dev -f docker-compose.dev.yml --profile apps up -d api web
 
-if [[ -d "${BACKEND_DIR}" && -f "${BACKEND_DIR}/package.json" ]] && command -v node >/dev/null 2>&1; then
-  log "Migrate/seed via backend..."
-  export DATABASE_URL="postgres://aerorf:aerorf@localhost:5433/aerorf"
-  (cd "${BACKEND_DIR}" && npm run migrate 2>/dev/null) || log "migrate skip (já aplicado ou node indisponível)"
-  (cd "${BACKEND_DIR}" && npm run seed 2>/dev/null) || log "seed skip"
-else
-  log "Seed SQL demo (sem Node/backend)..."
-  docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
-    < "${COMPOSE_DIR}/migrations/002_seed_demo.sql" 2>/dev/null || log "seed SQL skip"
-fi
+run_seed
 
 log "Aguardando API..."
 for _ in $(seq 1 45); do
@@ -51,7 +104,12 @@ for _ in $(seq 1 45); do
   sleep 2
 done
 
-curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null || { log "API não respondeu — docker logs aerorf_api"; exit 1; }
+curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null || {
+  log "API não respondeu:"
+  docker logs aerorf_api --tail 40 2>&1 || true
+  exit 1
+}
+
 curl -sf http://127.0.0.1:3000/api/health >/dev/null || log "Web ainda inicializando — docker logs aerorf_web"
 
 log "Deploy concluído."
