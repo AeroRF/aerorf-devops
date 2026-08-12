@@ -225,6 +225,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/012_notifications.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/013_aviation_transfer_cross_tenant.sql" ]]; then
+    local trf_status_col
+    trf_status_col="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='aviation_transfers' AND column_name='status';" \
+      2>/dev/null || echo 0)"
+    if [[ "${trf_status_col}" -eq 0 ]]; then
+      log "Aplicando migration transferência cross-tenant (013)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/013_aviation_transfer_cross_tenant.sql"
+    fi
+  fi
 }
 
 run_seed() {
