@@ -116,6 +116,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/006_estoque.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/007_telemetria.sql" ]]; then
+    local tel_tables
+    tel_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='telemetry_missions';" \
+      2>/dev/null || echo 0)"
+    if [[ "${tel_tables}" -eq 0 ]]; then
+      log "Aplicando migration telemetria (007)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/007_telemetria.sql"
+    fi
+  fi
 }
 
 run_seed() {
