@@ -80,6 +80,9 @@ ensure_env_dev() {
     set_env_var GRAFANA_ADMIN_PASSWORD "${GRAFANA_ADMIN_PASSWORD}"
     log "GRAFANA_ADMIN_PASSWORD configurado"
   fi
+
+  set_env_var NEXT_PUBLIC_API_URL "/api/v1"
+  set_env_var API_INTERNAL_URL "http://api:4000"
 }
 
 compose_dev() {
@@ -164,6 +167,39 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/008_unidades_meta.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/009_aviation_hour_logs_meta.sql" ]]; then
+    local hour_meta
+    hour_meta="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='aviation_hour_logs' AND column_name='metadata';" \
+      2>/dev/null || echo 0)"
+    if [[ "${hour_meta}" -eq 0 ]]; then
+      log "Aplicando migration aviation hour logs meta (009)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/009_aviation_hour_logs_meta.sql"
+    fi
+  fi
+  if [[ -f "${COMPOSE_DIR}/migrations/010_aviation_manutencao.sql" ]]; then
+    local rr_tables
+    rr_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='aviation_rr_history';" \
+      2>/dev/null || echo 0)"
+    if [[ "${rr_tables}" -eq 0 ]]; then
+      log "Aplicando migration aviation manutenção (010)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/010_aviation_manutencao.sql"
+    fi
+  fi
+  if [[ -f "${COMPOSE_DIR}/migrations/011_aviation_documents.sql" ]]; then
+    local av_docs
+    av_docs="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='aviation_documents';" \
+      2>/dev/null || echo 0)"
+    if [[ "${av_docs}" -eq 0 ]]; then
+      log "Aplicando migration aviation documentos (011)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/011_aviation_documents.sql"
+    fi
+  fi
 }
 
 run_seed() {
@@ -217,7 +253,7 @@ log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
 compose_dev --profile apps pull api web
 
 log "Subindo API + Web (force-recreate + pull)..."
-compose_dev --profile apps up -d --force-recreate --pull always api web web-api-proxy
+compose_dev --profile apps up -d --force-recreate --pull always api web
 
 log "Web image: $(docker inspect aerorf_web --format '{{.Config.Image}}' 2>/dev/null || echo unknown)"
 

@@ -129,24 +129,15 @@ services:
     image: ghcr.io/aerorf/aerorf-frontend:${AERORF_FRONTEND_TAG:-latest}
     container_name: aerorf_web
     environment:
-      API_INTERNAL_URL: http://127.0.0.1:4000
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: /api/v1
     ports:
       - "3000:3000"
     depends_on:
       - api
     networks:
       - aerorf-net
-
-  web-api-proxy:
-    profiles: ["apps"]
-    image: alpine/socat
-    network_mode: "service:web"
-    command: TCP-LISTEN:4000,fork,reuseaddr TCP:api:4000
-    depends_on:
-      - web
-      - api
-    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
