@@ -44,6 +44,15 @@ jobs:
             echo "::warning::GHCR_TOKEN ausente — usando GITHUB_TOKEN (pode falhar em imagens privadas)"
           fi
 
+      - name: Setup SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEV_SSH_KEY }}
+        run: |
+          install -d -m 700 "${HOME}/.ssh"
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > "${HOME}/.ssh/id_deploy"
+          chmod 600 "${HOME}/.ssh/id_deploy"
+          ssh-keygen -y -f "${HOME}/.ssh/id_deploy" >/dev/null
+
       - name: Deploy via SSH (Compose + GHCR)
         env:
           SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
@@ -51,16 +60,10 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ secrets.GHCR_USER || github.actor }}
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          install -m 600 /dev/stdin ~/.ssh/id_deploy <<EOF
-          ${{ secrets.DEV_SSH_KEY }}
-          EOF
-
           USER="${SSH_USER:-root}"
           echo "Conectando em ${USER}@${SSH_HOST}..."
 
-          ssh -i ~/.ssh/id_deploy \
+          ssh -i "${HOME}/.ssh/id_deploy" \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=30 \
             "${USER}@${SSH_HOST}" \
@@ -77,7 +80,7 @@ jobs:
           SSH_USER: ${{ secrets.DEV_SSH_USER }}
         run: |
           USER="${SSH_USER:-root}"
-          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no "${USER}@${SSH_HOST}" \
+          ssh -i "${HOME}/.ssh/id_deploy" -o StrictHostKeyChecking=no "${USER}@${SSH_HOST}" \
             "curl -sf http://127.0.0.1:4000/api/v1/health; echo; curl -sf http://127.0.0.1:3000/api/health; echo"
           echo ""
           echo "Web:  http://${SSH_HOST}:3000"
