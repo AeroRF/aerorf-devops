@@ -9,6 +9,8 @@ VPS_HOST="${VPS_HOST:-}"
 
 log() { printf '[bootstrap] %s\n' "$*"; }
 
+log "AeroRF bootstrap v3 — CentOS/yum (main $(date +%Y-%m-%d))"
+
 is_rhel_family() {
   [[ -f /etc/redhat-release ]] || grep -qiE 'centos|almalinux|rocky|rhel|fedora' /etc/os-release 2>/dev/null
 }
