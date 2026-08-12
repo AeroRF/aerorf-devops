@@ -115,6 +115,8 @@ compose_dev --profile apps pull api web
 log "Subindo API + Web (force-recreate + pull)..."
 compose_dev --profile apps up -d --force-recreate --pull always api web
 
+log "Web image: $(docker inspect aerorf_web --format '{{.Config.Image}}' 2>/dev/null || echo unknown)"
+
 run_seed
 
 log "Aguardando API..."

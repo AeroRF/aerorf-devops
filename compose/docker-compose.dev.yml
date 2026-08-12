@@ -129,15 +129,15 @@ services:
     profiles: ["apps"]
     image: ghcr.io/aerorf/aerorf-frontend:${AERORF_FRONTEND_TAG:-latest}
     container_name: aerorf_web
+    # host: Next (rewrite ou proxy) alcança a API em 127.0.0.1:4000 no host
+    network_mode: host
     environment:
-      API_INTERNAL_URL: http://api:4000
+      API_INTERNAL_URL: http://127.0.0.1:4000
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
-    ports:
-      - "3000:3000"
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
     depends_on:
       - api
-    networks:
-      - aerorf-net
 
   prometheus:
     image: prom/prometheus:latest
