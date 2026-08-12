@@ -81,6 +81,20 @@ ensure_env_dev() {
     log "GRAFANA_ADMIN_PASSWORD configurado"
   fi
 
+  if [[ -n "${RESEND_API_KEY:-}" ]]; then
+    set_env_var RESEND_API_KEY "${RESEND_API_KEY}"
+    log "RESEND_API_KEY configurado (notificações e-mail)"
+  fi
+  if [[ -n "${RESEND_FROM_EMAIL:-}" ]]; then
+    set_env_var RESEND_FROM_EMAIL "${RESEND_FROM_EMAIL}"
+    log "RESEND_FROM_EMAIL configurado"
+  fi
+  if [[ -n "${APP_PUBLIC_URL:-}" ]]; then
+    set_env_var APP_PUBLIC_URL "${APP_PUBLIC_URL}"
+  elif [[ -n "${vps_host:-}" ]]; then
+    set_env_var APP_PUBLIC_URL "http://${vps_host}:3000"
+  fi
+
   set_env_var NEXT_PUBLIC_API_URL "/api/v1"
   set_env_var API_INTERNAL_URL "http://api:4000"
 }
@@ -198,6 +212,17 @@ run_migrate_if_needed() {
       log "Aplicando migration aviation documentos (011)..."
       docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
         < "${COMPOSE_DIR}/migrations/011_aviation_documents.sql"
+    fi
+  fi
+  if [[ -f "${COMPOSE_DIR}/migrations/012_notifications.sql" ]]; then
+    local notif_tables
+    notif_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='notification_queue';" \
+      2>/dev/null || echo 0)"
+    if [[ "${notif_tables}" -eq 0 ]]; then
+      log "Aplicando migration notificações (012)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/012_notifications.sql"
     fi
   fi
 }
