@@ -18,13 +18,19 @@ on:
         options:
           - compose-ssh
           - kubernetes
+  push:
+    branches: [main]
+    paths:
+      - 'compose/**'
+      - 'devops/**'
+      - '.github/workflows/deploy-development.yml'
 
 permissions:
   contents: read
 
 jobs:
   deploy-compose-ssh:
-    if: inputs.target == 'compose-ssh'
+    if: github.event_name == 'push' || inputs.target == 'compose-ssh'
     runs-on: ubuntu-latest
     environment: development
     steps:
@@ -75,8 +81,8 @@ jobs:
             "export VPS_HOST='${SSH_HOST}'; \
              export GHCR_TOKEN='${GHCR_TOKEN}'; \
              export GHCR_USER='${GHCR_USER}'; \
-             export AERORF_BACKEND_TAG='${{ inputs.backend_tag }}'; \
-             export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag }}'; \
+             export AERORF_BACKEND_TAG='${{ inputs.backend_tag || 'latest' }}'; \
+             export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag || 'latest' }}'; \
              bash -s" < devops/scripts/remote-compose-deploy.sh
 
       - name: Health check no VPS
@@ -98,7 +104,7 @@ jobs:
           echo "API:  http://${SSH_HOST}:4000/api/v1/health"
 
   deploy-kubernetes:
-    if: inputs.target == 'kubernetes'
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'kubernetes'
     runs-on: ubuntu-latest
     environment: development
     env:
