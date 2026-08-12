@@ -94,6 +94,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/004_caminhoes.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/005_combustiveis.sql" ]]; then
+    local fuel_tables
+    fuel_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='fuel_tanks';" \
+      2>/dev/null || echo 0)"
+    if [[ "${fuel_tables}" -eq 0 ]]; then
+      log "Aplicando migration combustíveis (005)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/005_combustiveis.sql"
+    fi
+  fi
 }
 
 run_seed() {
