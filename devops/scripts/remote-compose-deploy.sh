@@ -236,6 +236,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/013_aviation_transfer_cross_tenant.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/014_aviation_transfer_invites.sql" ]]; then
+    local trf_invite_table
+    trf_invite_table="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='aviation_transfer_invites';" \
+      2>/dev/null || echo 0)"
+    if [[ "${trf_invite_table}" -eq 0 ]]; then
+      log "Aplicando migration convites transferência (014)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/014_aviation_transfer_invites.sql"
+    fi
+  fi
 }
 
 run_seed() {
