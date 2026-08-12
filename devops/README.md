@@ -49,19 +49,23 @@ npm run devops:mirror
 
 ## Espelhamento monorepo → GitHub
 
-Antes de push/deploy, sincronize o código dos repos split:
+Antes de push/deploy, sincronize o código dos repos split (**agente executa**, não o usuário):
 
 ```bash
-# No monorepo (recomendado)
 npm run devops:mirror
-# ou dry-run
-npm run devops:mirror:check
-
-# A partir deste repo (monorepo em ../..)
-AERORF_MONOREPO_ROOT=/caminho/AeroRF_MONOREPO ./devops/scripts/mirror-repos-split.sh
 ```
 
 O script **não** copia Dockerfiles nem CI — cada repo split tem estrutura própria.
+
+## Deploy (usuário — somente GitHub Actions)
+
+**Não** rodar terminal local. Após CI verde nos repos:
+
+1. GitHub → **AeroRF/aerorf-devops** → Actions → **Deploy Development** → Run workflow
+2. Tags padrão: `latest` (backend e frontend)
+3. Migrations em `compose/migrations/` são aplicadas automaticamente no VPS
+
+Push em `compose/**` ou `devops/**` pode disparar deploy automático (workflow `push`).
 
 ## Estrutura
 

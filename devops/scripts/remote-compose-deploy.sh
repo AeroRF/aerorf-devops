@@ -153,6 +153,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/007_telemetria.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/008_unidades_meta.sql" ]]; then
+    local uni_meta
+    uni_meta="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='unidades' AND column_name='metadata';" \
+      2>/dev/null || echo 0)"
+    if [[ "${uni_meta}" -eq 0 ]]; then
+      log "Aplicando migration unidades metadata (008)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/008_unidades_meta.sql"
+    fi
+  fi
 }
 
 run_seed() {
