@@ -75,8 +75,8 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     networks:
       - aerorf-net
 
@@ -116,7 +116,7 @@ services:
       - ../keys/jwt-private.pem:/run/secrets/jwt_private:ro
       - ../keys/jwt-public.pem:/run/secrets/jwt_public:ro
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     depends_on:
       - pgbouncer
       - redis
@@ -134,7 +134,7 @@ services:
       NEXT_PUBLIC_API_URL: /api/v1
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - api
     networks:
@@ -147,7 +147,7 @@ services:
       - ../observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     depends_on:
       - alertmanager
     networks:
@@ -169,7 +169,7 @@ services:
         fi
         exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9093:9093"
     networks:
       - aerorf-net
 
@@ -246,7 +246,7 @@ services:
       - grafana_data:/var/lib/grafana
       - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q ok || exit 1"]
       interval: 15s
