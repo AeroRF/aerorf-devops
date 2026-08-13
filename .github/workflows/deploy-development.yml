@@ -147,6 +147,7 @@ jobs:
              export GRAFANA_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}'; \
              export RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}'; \
              export RESEND_FROM_EMAIL='${{ secrets.RESEND_FROM_EMAIL }}'; \
+             export DEV_OPS_TOKEN='${{ secrets.DEV_OPS_TOKEN }}'; \
              bash -s" < devops/scripts/remote-compose-deploy.sh
 
       - name: Notificar Slack — deploy concluído

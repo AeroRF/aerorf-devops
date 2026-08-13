@@ -100,6 +100,10 @@ ensure_env_dev() {
     set_env_var RESEND_FROM_EMAIL "${RESEND_FROM_EMAIL}"
     log "RESEND_FROM_EMAIL configurado"
   fi
+  if [[ -n "${DEV_OPS_TOKEN:-}" ]]; then
+    set_env_var DEV_OPS_TOKEN "${DEV_OPS_TOKEN}"
+    log "DEV_OPS_TOKEN configurado (reset admin via pipeline)"
+  fi
   if [[ -n "${APP_PUBLIC_URL:-}" ]]; then
     set_env_var APP_PUBLIC_URL "${APP_PUBLIC_URL}"
     set_env_var NEXT_PUBLIC_APP_URL "${APP_PUBLIC_URL}"

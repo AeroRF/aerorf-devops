@@ -24,6 +24,10 @@ O deploy (`remote-compose-deploy.sh`) após subir containers:
 | `APP_PUBLIC_URL` | `https://app.aerorf.com.br` | Após DNS + certbot |
 | `CORS_ORIGIN` | `https://app.aerorf.com.br` | Idem |
 | `COOKIE_SECURE` | `true` | Com HTTPS |
+| `DEV_OPS_TOKEN` | (openssl rand -hex 32) | Reset admin via pipeline |
+| `GRAFANA_ADMIN_PASSWORD` | senha forte | Grafana + workflow reset |
+
+**Reset credenciais:** Actions → **Reset Dev Credentials** (Grafana + convite Resend admin)
 
 ---
 
