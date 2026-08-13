@@ -61,8 +61,19 @@ ensure_env_dev() {
   fi
   if [[ -n "${vps_host}" ]]; then
     sed -i "s/SEU_IP_OU_DOMINIO/${vps_host}/g" "${COMPOSE_DIR}/.env.dev"
-    sed -i "s|^CORS_ORIGIN=.*|CORS_ORIGIN=http://${vps_host}:3000|" "${COMPOSE_DIR}/.env.dev"
-    log "CORS_ORIGIN → http://${vps_host}:3000"
+    if [[ -z "${APP_PUBLIC_URL:-}" && -z "${CORS_ORIGIN:-}" ]]; then
+      sed -i "s|^CORS_ORIGIN=.*|CORS_ORIGIN=http://${vps_host}:3000|" "${COMPOSE_DIR}/.env.dev"
+      log "CORS_ORIGIN → http://${vps_host}:3000"
+    fi
+  fi
+
+  if [[ -n "${CORS_ORIGIN:-}" ]]; then
+    set_env_var CORS_ORIGIN "${CORS_ORIGIN}"
+    log "CORS_ORIGIN → ${CORS_ORIGIN}"
+  fi
+
+  if [[ -n "${COOKIE_SECURE:-}" ]]; then
+    set_env_var COOKIE_SECURE "${COOKIE_SECURE}"
   fi
 
   if [[ -n "${SLACK_WEBHOOK_URL:-}" ]]; then
@@ -409,6 +420,15 @@ if [[ "${login_code}" != "200" ]]; then
   exit 1
 fi
 log "Login smoke test OK."
+
+if [[ "${AERORF_SETUP_NGINX:-1}" == "1" ]]; then
+  log "Nginx — LiteSpeed → reverse proxy (pipeline)..."
+  # shellcheck source=/dev/null
+  source "${DEVOPS_DIR}/nginx/setup-vps-nginx.sh"
+  setup_vps_nginx
+else
+  log "Nginx skip (AERORF_SETUP_NGINX=${AERORF_SETUP_NGINX:-})"
+fi
 
 log "Deploy concluído."
 compose_dev --profile apps ps

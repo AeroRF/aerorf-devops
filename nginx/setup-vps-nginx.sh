@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
 # AeroRF — Nginx na VPS HostGator (AlmaLinux + LiteSpeed na porta 80)
-# VPS exclusiva AeroRF: para LiteSpeed e usa Nginx como reverse proxy.
+# Invocado pelo pipeline (remote-compose-deploy.sh) — NÃO rode git manualmente na VPS.
 #
-# Uso (na VPS, como root):
-#   curl -fsSL https://raw.githubusercontent.com/AeroRF/aerorf-devops/main/nginx/setup-vps-nginx.sh | bash
-#   # ou, com repo já clonado:
-#   bash ~/aerorf/aerorf-devops/nginx/setup-vps-nginx.sh
-#
-# SSL (após DNS propagado):
-#   bash ~/aerorf/aerorf-devops/nginx/setup-vps-nginx.sh --certbot
+# Requer DEVOPS_DIR já atualizado pelo deploy (ensure_devops_repo).
+# SSL opcional: AERORF_CERTBOT=1
 set -euo pipefail
 
 DEVOPS_DIR="${DEVOPS_DIR:-$HOME/aerorf/aerorf-devops}"
 CONF_SRC="${DEVOPS_DIR}/nginx/aerorf.conf"
 CONF_DEST="/etc/nginx/conf.d/aerorf.conf"
-RUN_CERTBOT=false
-[[ "${1:-}" == "--certbot" ]] && RUN_CERTBOT=true
 
 log() { printf '[nginx-setup] %s\n' "$*"; }
 
@@ -42,16 +35,6 @@ install_packages() {
   fi
 }
 
-ensure_devops_repo() {
-  if [[ ! -f "${CONF_SRC}" ]]; then
-    log "Clonando aerorf-devops..."
-    mkdir -p "$(dirname "${DEVOPS_DIR}")"
-    git clone https://github.com/AeroRF/aerorf-devops.git "${DEVOPS_DIR}"
-    git -C "${DEVOPS_DIR}" pull --ff-only origin main 2>/dev/null || true
-  fi
-  [[ -f "${CONF_SRC}" ]] || { log "Arquivo não encontrado: ${CONF_SRC}"; exit 1; }
-}
-
 stop_litespeed() {
   if ss -tlnp 2>/dev/null | grep -qE ':80 .*litespeed'; then
     log "LiteSpeed ocupa a porta 80 — parando (VPS exclusiva AeroRF)..."
@@ -62,7 +45,7 @@ stop_litespeed() {
     run_root systemctl disable lsws 2>/dev/null || true
     sleep 2
     if ss -tlnp 2>/dev/null | grep -qE ':80 .*litespeed'; then
-      log "ERRO: LiteSpeed ainda na porta 80. Verifique: ss -tlnp | grep ':80 '"
+      log "ERRO: LiteSpeed ainda na porta 80."
       exit 1
     fi
     log "LiteSpeed parado."
@@ -115,6 +98,7 @@ configure_firewall() {
 }
 
 install_aerorf_conf() {
+  [[ -f "${CONF_SRC}" ]] || { log "Config não encontrada: ${CONF_SRC} (deploy deveria ter atualizado aerorf-devops)"; exit 1; }
   log "Instalando ${CONF_DEST}..."
   run_root cp "${CONF_SRC}" "${CONF_DEST}"
   if is_rhel_family; then
@@ -124,61 +108,59 @@ install_aerorf_conf() {
 }
 
 start_nginx() {
-  run_root systemctl start nginx
-  run_root systemctl reload nginx 2>/dev/null || true
+  run_root systemctl start nginx 2>/dev/null || true
+  run_root systemctl reload nginx
   if run_root systemctl is-active nginx >/dev/null 2>&1; then
     log "Nginx active."
   else
-    log "ERRO: Nginx não subiu. Verifique: systemctl status nginx"
+    log "ERRO: Nginx não subiu."
     exit 1
   fi
 }
 
 run_certbot() {
-  log "Emitindo certificados Let's Encrypt (DNS deve apontar para esta VPS)..."
+  log "Emitindo certificados Let's Encrypt..."
   run_root certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email \
     -d aerorf.com.br \
     -d www.aerorf.com.br \
     -d app.aerorf.com.br \
     -d api.aerorf.com.br \
-    || {
-      log "Certbot falhou — confira DNS e rode depois:"
-      log "  certbot --nginx -d aerorf.com.br -d www.aerorf.com.br -d app.aerorf.com.br -d api.aerorf.com.br"
-      return 0
-    }
-  log "HTTPS configurado."
+    && log "HTTPS configurado." \
+    || log "Certbot falhou (DNS ainda propagando?) — próximo deploy com run_certbot=true"
 }
 
 smoke_test() {
-  log "Smoke test local..."
+  log "Smoke test Nginx..."
   curl -sf http://127.0.0.1:3000/api/health >/dev/null \
-    && log "  web :3000 OK" || log "  web :3000 — container aerorf_web rodando?"
+    && log "  web :3000 OK" || log "  web :3000 — aguardando container"
   curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null \
-    && log "  api :4000 OK" || log "  api :4000 — container aerorf_api rodando?"
+    && log "  api :4000 OK" || log "  api :4000 — aguardando container"
   curl -sf -o /dev/null -w '' -H 'Host: aerorf.com.br' http://127.0.0.1/ \
-    && log "  nginx proxy (Host: aerorf.com.br) OK" || log "  nginx proxy — verifique aerorf.conf"
+    && log "  nginx → landing (Host: aerorf.com.br) OK" \
+    || log "  nginx proxy landing — verifique aerorf.conf"
+  curl -sf -o /dev/null -w '' -H 'Host: app.aerorf.com.br' http://127.0.0.1/login \
+    && log "  nginx → app (Host: app.aerorf.com.br) OK" \
+    || log "  nginx proxy app — verifique aerorf.conf"
 }
 
-# --- main ---
-[[ "$(id -u)" -eq 0 ]] || command -v sudo >/dev/null || { log "Execute como root ou com sudo."; exit 1; }
+# --- main (sourceable ou standalone) ---
+setup_vps_nginx() {
+  [[ "$(id -u)" -eq 0 ]] || command -v sudo >/dev/null || { log "Execute como root ou com sudo."; exit 1; }
 
-ensure_devops_repo
-stop_litespeed
-install_nginx
-install_certbot
-configure_selinux
-configure_firewall
-install_aerorf_conf
-start_nginx
-smoke_test
+  stop_litespeed
+  install_nginx
+  install_certbot
+  configure_selinux
+  configure_firewall
+  install_aerorf_conf
+  start_nginx
+  smoke_test
 
-if $RUN_CERTBOT; then
-  run_certbot
+  if [[ "${AERORF_CERTBOT:-}" == "1" ]]; then
+    run_certbot
+  fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  setup_vps_nginx
 fi
-
-log ""
-log "Concluído. Próximos passos:"
-log "  1. DNS A → IP desta VPS (@, www, app, api, ...)"
-log "  2. Certbot: bash ${DEVOPS_DIR}/nginx/setup-vps-nginx.sh --certbot"
-log "  3. Deploy GitHub: CORS_ORIGIN / APP_PUBLIC_URL = https://app.aerorf.com.br"
-log "  4. Teste: https://aerorf.com.br  |  https://app.aerorf.com.br/login"

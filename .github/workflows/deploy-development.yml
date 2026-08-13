@@ -11,6 +11,14 @@ on:
         description: Tag da imagem frontend no GHCR
         default: latest
         type: string
+      setup_nginx:
+        description: Configurar Nginx (para LiteSpeed na porta 80)
+        default: true
+        type: boolean
+      run_certbot:
+        description: Emitir HTTPS Let's Encrypt (DNS deve apontar para a VPS)
+        default: false
+        type: boolean
       target:
         description: Destino do deploy
         default: compose-ssh
@@ -24,6 +32,7 @@ on:
       - 'compose/**'
       - 'observability/**'
       - 'devops/**'
+      - 'nginx/**'
       - '.github/workflows/deploy-development.yml'
 
 permissions:
@@ -128,6 +137,11 @@ jobs:
              export AERORF_BACKEND_TAG='${{ inputs.backend_tag || 'latest' }}'; \
              export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag || 'latest' }}'; \
              export AERORF_IMAGES_PRELOADED='1'; \
+             export AERORF_SETUP_NGINX='${{ inputs.setup_nginx == false && '0' || '1' }}'; \
+             export AERORF_CERTBOT='${{ inputs.run_certbot == true && '1' || '0' }}'; \
+             export APP_PUBLIC_URL='${{ secrets.APP_PUBLIC_URL }}'; \
+             export CORS_ORIGIN='${{ secrets.CORS_ORIGIN }}'; \
+             export COOKIE_SECURE='${{ secrets.COOKIE_SECURE }}'; \
              export SLACK_WEBHOOK_URL='${{ secrets.SLACK_WEBHOOK_URL }}'; \
              export GRAFANA_ADMIN_USER='${{ secrets.GRAFANA_ADMIN_USER }}'; \
              export GRAFANA_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}'; \
@@ -167,11 +181,16 @@ jobs:
             -o StrictHostKeyChecking=no \
             -o HostKeyAlgorithms=+ssh-rsa \
             "${USER}@${SSH_HOST}" \
-            "curl -sf http://127.0.0.1:4000/api/v1/health; echo; curl -sf http://127.0.0.1:3000/api/health; echo; curl -sf http://127.0.0.1:3001/api/health; echo"
+            "curl -sf http://127.0.0.1:4000/api/v1/health; echo; \
+             curl -sf http://127.0.0.1:3000/api/health; echo; \
+             curl -sf -H 'Host: aerorf.com.br' http://127.0.0.1/ -o /dev/null -w 'nginx-landing:%{http_code}\n'; \
+             curl -sf -H 'Host: app.aerorf.com.br' http://127.0.0.1/login -o /dev/null -w 'nginx-app:%{http_code}\n'; \
+             curl -sf http://127.0.0.1:3001/api/health; echo"
           echo ""
-          echo "Web:     http://${SSH_HOST}:3000"
-          echo "API:     http://${SSH_HOST}:4000/api/v1/health"
-          echo "Grafana: http://${SSH_HOST}:3001  (admin / ver secret GRAFANA_ADMIN_PASSWORD)"
+          echo "Landing: http://aerorf.com.br  (após DNS + certbot)"
+          echo "App:     http://app.aerorf.com.br/login"
+          echo "API:     http://api.aerorf.com.br/api/v1/health"
+          echo "Grafana: http://${SSH_HOST}:3001  (admin / secret GRAFANA_ADMIN_PASSWORD)"
 
   deploy-kubernetes:
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'kubernetes'
