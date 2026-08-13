@@ -28,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   deploy-compose-ssh:
@@ -60,7 +61,49 @@ jobs:
           chmod 600 "${HOME}/.ssh/id_deploy"
           ssh-keygen -y -f "${HOME}/.ssh/id_deploy" >/dev/null
 
-      - name: Deploy via SSH (Compose + GHCR)
+      - name: Pull imagens no runner e transferir para VPS
+        env:
+          SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEV_SSH_USER }}
+          SSH_PORT: ${{ secrets.DEV_SSH_PORT || '22022' }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_USER || github.actor }}
+          BACKEND_TAG: ${{ inputs.backend_tag || 'latest' }}
+          FRONTEND_TAG: ${{ inputs.frontend_tag || 'latest' }}
+        run: |
+          USER="${SSH_USER:-root}"
+          BACKEND_IMG="ghcr.io/aerorf/aerorf-backend:${BACKEND_TAG}"
+          FRONTEND_IMG="ghcr.io/aerorf/aerorf-frontend:${FRONTEND_TAG}"
+
+          echo "Pull no GitHub Actions (VPS HostGator frequentemente não alcança ghcr.io)..."
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+          docker pull "${BACKEND_IMG}"
+          docker pull "${FRONTEND_IMG}"
+
+          echo "Empacotando imagens (~pode levar alguns minutos)..."
+          docker save "${BACKEND_IMG}" "${FRONTEND_IMG}" | gzip -1 > /tmp/aerorf-apps.tar.gz
+          ls -lh /tmp/aerorf-apps.tar.gz
+
+          echo "Enviando para ${USER}@${SSH_HOST}:${SSH_PORT}..."
+          scp -i "${HOME}/.ssh/id_deploy" \
+            -P "${SSH_PORT}" \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=60 \
+            -o HostKeyAlgorithms=+ssh-rsa \
+            /tmp/aerorf-apps.tar.gz "${USER}@${SSH_HOST}:/tmp/aerorf-apps.tar.gz"
+
+          echo "Carregando imagens no Docker da VPS..."
+          ssh -i "${HOME}/.ssh/id_deploy" \
+            -p "${SSH_PORT}" \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=60 \
+            -o ServerAliveInterval=15 \
+            -o HostKeyAlgorithms=+ssh-rsa \
+            "${USER}@${SSH_HOST}" \
+            "gunzip -c /tmp/aerorf-apps.tar.gz | docker load && rm -f /tmp/aerorf-apps.tar.gz"
+          rm -f /tmp/aerorf-apps.tar.gz
+
+      - name: Deploy via SSH (Compose)
         env:
           SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
           SSH_USER: ${{ secrets.DEV_SSH_USER }}
@@ -84,6 +127,7 @@ jobs:
              export GHCR_USER='${GHCR_USER}'; \
              export AERORF_BACKEND_TAG='${{ inputs.backend_tag || 'latest' }}'; \
              export AERORF_FRONTEND_TAG='${{ inputs.frontend_tag || 'latest' }}'; \
+             export AERORF_IMAGES_PRELOADED='1'; \
              export SLACK_WEBHOOK_URL='${{ secrets.SLACK_WEBHOOK_URL }}'; \
              export GRAFANA_ADMIN_USER='${{ secrets.GRAFANA_ADMIN_USER }}'; \
              export GRAFANA_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}'; \

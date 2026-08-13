@@ -313,8 +313,12 @@ ensure_env_dev
 command -v docker >/dev/null 2>&1 || { log "Docker não encontrado no VPS."; exit 1; }
 docker info >/dev/null 2>&1 || { log "Docker daemon não está rodando."; exit 1; }
 
-log "Login GHCR..."
-echo "${GHCR_TOKEN:?GHCR_TOKEN required}" | docker login ghcr.io -u "${GHCR_USER:?GHCR_USER required}" --password-stdin
+if [[ "${AERORF_IMAGES_PRELOADED:-}" == "1" ]]; then
+  log "Imagens pré-carregadas pelo pipeline GitHub Actions — skip login/pull GHCR"
+else
+  log "Login GHCR..."
+  echo "${GHCR_TOKEN:?GHCR_TOKEN required}" | docker login ghcr.io -u "${GHCR_USER:?GHCR_USER required}" --password-stdin
+fi
 
 cd "${COMPOSE_DIR}"
 export AERORF_BACKEND_TAG="${AERORF_BACKEND_TAG:-latest}"
@@ -342,11 +346,18 @@ sleep 5
 
 run_migrate_if_needed
 
-log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
-compose_dev --profile apps pull api web
+if [[ "${AERORF_IMAGES_PRELOADED:-}" == "1" ]]; then
+  log "Apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG} (imagens já na VPS)"
+else
+  log "Pull apps backend=${AERORF_BACKEND_TAG} frontend=${AERORF_FRONTEND_TAG}"
+  compose_dev --profile apps pull api web
+fi
 
-log "Subindo API + Web (force-recreate + pull)..."
-compose_dev --profile apps up -d --force-recreate --pull always api web
+PULL_FLAG="always"
+[[ "${AERORF_IMAGES_PRELOADED:-}" == "1" ]] && PULL_FLAG="never"
+
+log "Subindo API + Web (force-recreate, pull=${PULL_FLAG})..."
+compose_dev --profile apps up -d --force-recreate --pull "${PULL_FLAG}" api web
 
 log "Web image: $(docker inspect aerorf_web --format '{{.Config.Image}}' 2>/dev/null || echo unknown)"
 
