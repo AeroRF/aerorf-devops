@@ -16,17 +16,18 @@ route:
 receivers:
   - name: slack
     slack_configs:
+      # channel omitido — webhook do Slack já define o canal de destino
       - api_url: '__SLACK_WEBHOOK_URL__'
-        channel: '#aerorf-alerts'
+        send_resolved: true
         username: 'AeroRF Alertmanager'
         icon_emoji: ':rotating_light:'
-        title: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} ({{ .GroupLabels.environment }})'
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
         text: |-
+          *Ambiente:* {{ .CommonLabels.environment }}
           {{ range .Alerts }}
-          *{{ .Labels.severity }}* — {{ .Annotations.summary }}
-          {{ .Annotations.description }}
+          • *{{ .Labels.severity }}* — {{ .Annotations.summary }}
+            {{ .Annotations.description }}
           {{ end }}
-        send_resolved: true
 
 inhibit_rules:
   - source_match:

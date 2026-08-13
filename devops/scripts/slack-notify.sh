@@ -17,9 +17,12 @@ case "${STATUS}" in
   success) EMOJI="✅" ;;
   failure) EMOJI="❌" ;;
   started) EMOJI="🚀" ;;
+  cancelled) EMOJI="⚪" ;;
 esac
 
-export EMOJI TITLE BODY STATUS SLACK_WEBHOOK_URL="${WEBHOOK}"
+RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-AeroRF/aerorf-devops}/actions/runs/${GITHUB_RUN_ID:-local}"
+
+export EMOJI TITLE BODY STATUS RUN_URL SLACK_WEBHOOK_URL="${WEBHOOK}"
 python3 <<'PY'
 import json
 import os
@@ -29,6 +32,7 @@ emoji = os.environ.get("EMOJI", "")
 title = os.environ.get("TITLE", "AeroRF")
 body = os.environ.get("BODY", "").replace("\\n", "\n")
 status = os.environ.get("STATUS", "unknown")
+run_url = os.environ.get("RUN_URL", "")
 
 fields = []
 for line in body.strip().splitlines():
@@ -55,6 +59,16 @@ blocks = [
 if fields:
     for i in range(0, len(fields), 10):
         blocks.append({"type": "section", "fields": fields[i : i + 10]})
+
+if run_url and run_url.endswith("/local") is False and "/actions/runs/" in run_url:
+    blocks.append({
+        "type": "actions",
+        "elements": [{
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Ver workflow", "emoji": True},
+            "url": run_url,
+        }],
+    })
 
 payload = json.dumps({"blocks": blocks}).encode()
 req = urllib.request.Request(

@@ -33,31 +33,39 @@ Painéis incluídos:
 - Logs de erro (Loki)
 - Alertas Prometheus ativos
 
-## Slack — alertas
+## Slack — alertas e deploys
 
-### 1. Alertas de sistema (Prometheus → Alertmanager → Slack)
+### Secret obrigatório
 
-Configure no environment **development**:
+No GitHub → **Settings → Environments → development** → Secret:
 
 ```
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
 ```
 
-Canal sugerido: `#aerorf-alerts`
+Crie o webhook em [Slack API → Incoming Webhooks](https://api.slack.com/messaging/webhooks) apontando para o canal desejado (ex.: `#aerorf-alerts` ou `#deploys`).
 
-Dispara em: 5xx, 4xx em pico, falhas de login, erros storage/proxy, CPU/memória/disco, serviços down.
+> **Importante:** o canal é definido na criação do webhook — não é necessário (e pode falhar) configurar `channel` no Alertmanager.
+
+### 1. Alertas de sistema (Prometheus → Alertmanager → Slack)
+
+Após cada deploy VPS, o script `observability-slack-verify.sh`:
+- recria o Alertmanager com o webhook atualizado
+- envia um ping de confirmação no Slack
+- valida Prometheus e targets
+
+Dispara alertas em: 5xx, 4xx em pico, falhas de login, erros storage/proxy, CPU/memória/disco, serviços down.
 
 ### 2. Deployments CI/CD (GitHub Actions → Slack)
 
-O mesmo `SLACK_WEBHOOK_URL` notifica:
+| Evento | Repo | Quando |
+|--------|------|--------|
+| Imagem backend publicada | `aerorf-backend` | push main |
+| Imagem frontend publicada | `aerorf-frontend` | push main |
+| Deploy VPS iniciado/concluído | `aerorf-devops` | Deploy Development |
+| Reset credenciais | `aerorf-devops` | Reset Dev Credentials |
 
-| Evento | Repo |
-|--------|------|
-| Imagem backend publicada | `aerorf-backend` |
-| Imagem frontend publicada | `aerorf-frontend` |
-| Deploy VPS concluído/falhou | `aerorf-devops` |
-
-Configure o secret em **cada repositório** ou no nível da org `AeroRF`.
+O secret `SLACK_WEBHOOK_URL` deve estar no environment **development** (usado pelos jobs de publish e deploy).
 
 ## Separação de ambientes
 

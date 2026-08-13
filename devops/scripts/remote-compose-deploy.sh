@@ -434,5 +434,13 @@ else
   log "Nginx skip (AERORF_SETUP_NGINX=${AERORF_SETUP_NGINX:-})"
 fi
 
+log "Observabilidade — Alertmanager + ping Slack..."
+if [[ -f "${DEVOPS_DIR}/devops/scripts/observability-slack-verify.sh" ]]; then
+  COMPOSE_DIR="${COMPOSE_DIR}" DEVOPS_DIR="${DEVOPS_DIR}" SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
+    bash "${DEVOPS_DIR}/devops/scripts/observability-slack-verify.sh" || log "Observability verify falhou (não bloqueia deploy)"
+else
+  log "observability-slack-verify.sh ausente — atualize aerorf-devops (git pull)"
+fi
+
 log "Deploy concluído."
 compose_dev --profile apps ps

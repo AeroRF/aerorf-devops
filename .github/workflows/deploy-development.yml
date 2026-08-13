@@ -60,6 +60,30 @@ jobs:
           if [[ -z "${{ secrets.GHCR_TOKEN }}" ]]; then
             echo "::warning::GHCR_TOKEN ausente — usando GITHUB_TOKEN (pode falhar em imagens privadas)"
           fi
+          if [[ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]]; then
+            echo "::warning::SLACK_WEBHOOK_URL ausente — sem notificações Slack nem alertas Prometheus no VPS"
+          fi
+
+      - name: Notificar Slack — deploy iniciado
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          chmod +x devops/scripts/slack-notify.sh
+          BODY=$(cat <<EOF
+          Repo: aerorf-devops
+          Host: ${{ secrets.DEV_SSH_HOST }}
+          Backend: ${{ inputs.backend_tag || 'latest' }}
+          Frontend: ${{ inputs.frontend_tag || 'latest' }}
+          Nginx: ${{ inputs.setup_nginx != false }}
+          Certbot: ${{ inputs.run_certbot == true }}
+          Actor: ${{ github.actor }}
+          Trigger: ${{ github.event_name }}
+          EOF
+          )
+          devops/scripts/slack-notify.sh started "Deploy Dev (VPS)" "${BODY}"
 
       - name: Setup SSH key
         env:
@@ -150,27 +174,9 @@ jobs:
              export DEV_OPS_TOKEN='${{ secrets.DEV_OPS_TOKEN }}'; \
              bash -s" < devops/scripts/remote-compose-deploy.sh
 
-      - name: Notificar Slack — deploy concluído
-        if: always()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          chmod +x devops/scripts/slack-notify.sh
-          STATUS="${{ job.status }}"
-          HOST="${{ secrets.DEV_SSH_HOST }}"
-          BODY=$(cat <<EOF
-          Repo: aerorf-devops
-          Host: ${HOST}
-          Backend: ${{ inputs.backend_tag || 'latest' }}
-          Frontend: ${{ inputs.frontend_tag || 'latest' }}
-          Commit: ${{ github.sha }}
-          Grafana: http://${HOST}:3001
-          EOF
-          )
-          devops/scripts/slack-notify.sh "${STATUS}" "Deploy DevOps (VPS)" "${BODY}"
-
       - name: Health check no VPS
         if: success()
+        id: health
         env:
           SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
           SSH_USER: ${{ secrets.DEV_SSH_USER }}
@@ -186,12 +192,40 @@ jobs:
              curl -sf http://127.0.0.1:3000/api/health; echo; \
              curl -sf -H 'Host: aerorf.com.br' http://127.0.0.1/ -o /dev/null -w 'nginx-landing:%{http_code}\n'; \
              curl -sf -H 'Host: app.aerorf.com.br' http://127.0.0.1/login -o /dev/null -w 'nginx-app:%{http_code}\n'; \
-             curl -sf http://127.0.0.1:3001/api/health; echo"
+             curl -sf http://127.0.0.1:3001/api/health; echo; \
+             curl -sf http://127.0.0.1:9093/-/healthy && echo alertmanager:ok || echo alertmanager:fail"
           echo ""
           echo "Landing: http://aerorf.com.br  (após DNS + certbot)"
           echo "App:     http://app.aerorf.com.br/login"
           echo "API:     http://api.aerorf.com.br/api/v1/health"
           echo "Grafana: http://${SSH_HOST}:3001  (admin / secret GRAFANA_ADMIN_PASSWORD)"
+
+      - name: Notificar Slack — deploy concluído
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          chmod +x devops/scripts/slack-notify.sh
+          STATUS="${{ job.status }}"
+          HOST="${{ secrets.DEV_SSH_HOST }}"
+          SLACK_ALERTS="configurado"
+          [[ -z "${SLACK_WEBHOOK_URL}" ]] && SLACK_ALERTS="ausente (configure SLACK_WEBHOOK_URL)"
+          BODY=$(cat <<EOF
+          Repo: aerorf-devops
+          Host: ${HOST}
+          Backend: ${{ inputs.backend_tag || 'latest' }}
+          Frontend: ${{ inputs.frontend_tag || 'latest' }}
+          Commit: ${{ github.sha }}
+          Health: ${{ steps.health.outcome || 'skipped' }}
+          Alertmanager: ${SLACK_ALERTS}
+          Grafana: http://${HOST}:3001
+          Prometheus: http://${HOST}:9090
+          EOF
+          )
+          devops/scripts/slack-notify.sh "${STATUS}" "Deploy Dev (VPS)" "${BODY}"
 
   deploy-kubernetes:
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'kubernetes'
@@ -202,6 +236,16 @@ jobs:
       REGISTRY: ghcr.io/aerorf
     steps:
       - uses: actions/checkout@v4
+
+      - name: Notificar Slack — deploy K8s iniciado
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          chmod +x devops/scripts/slack-notify.sh
+          devops/scripts/slack-notify.sh started "Deploy Dev (K8s)" "Namespace: aerorf-dev"
 
       - uses: azure/setup-kubectl@v4
 
@@ -240,3 +284,21 @@ jobs:
           kubectl rollout status deployment/aerorf-api -n "${NAMESPACE}" --timeout=180s
           kubectl rollout status deployment/aerorf-web -n "${NAMESPACE}" --timeout=180s
           kubectl get pods,svc -n "${NAMESPACE}"
+
+      - name: Notificar Slack — deploy K8s concluído
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          chmod +x devops/scripts/slack-notify.sh
+          BODY=$(cat <<EOF
+          Namespace: aerorf-dev
+          Backend: ${{ inputs.backend_tag }}
+          Frontend: ${{ inputs.frontend_tag }}
+          Commit: ${{ github.sha }}
+          EOF
+          )
+          devops/scripts/slack-notify.sh "${{ job.status }}" "Deploy Dev (K8s)" "${BODY}"
