@@ -27,6 +27,41 @@ O deploy (`remote-compose-deploy.sh`) após subir containers:
 
 ---
 
+## Cloudflare + HTTPS (404 LiteSpeed)
+
+Se **http://IP** funciona mas **https://domínio** mostra:
+
+```text
+404 Not Found
+The resource requested could not be found on this server!
+x-turbo-charged-by: LiteSpeed
+```
+
+**Causa:** DNS ainda passa pela **Cloudflare** (proxy laranja). O browser abre **HTTPS**. Com SSL mode **Full**, a Cloudflare liga na origem na porta **443** — onde ainda existe **LiteSpeed** (HostGator), não o Nginx da VPS (só configurado na **80** por enquanto).
+
+| Teste | Resultado típico |
+|-------|------------------|
+| `http://IP` | ✅ Nginx → app |
+| `http://aerorf.com.br` | ✅ Cloudflare → VPS:80 |
+| `https://aerorf.com.br` | ❌ Cloudflare → origem:443 LiteSpeed |
+
+### Correção rápida (Cloudflare Dashboard)
+
+1. **SSL/TLS** → modo **Flexible** (visitante HTTPS, origem HTTP porta 80)  
+   → `https://aerorf.com.br` passa a funcionar sem certificado na VPS.
+
+2. **DNS** → registros A de `@`, `www`, `app`, `api` com **IP da VPS** (não IP de hospedagem compartilhada antiga).
+
+### Correção definitiva
+
+1. Deploy com **`run_certbot=true`** (Nginx passa a escutar **443** na VPS).  
+2. Cloudflare **SSL/TLS** → **Full** (ou Full strict com cert válido na origem).  
+3. Secrets: `APP_PUBLIC_URL`, `CORS_ORIGIN`, `COOKIE_SECURE=true` + redeploy.
+
+Para Certbot HTTP-01 com proxy laranja: geralmente funciona na porta 80; se falhar, use **DNS only** (nuvem cinza) só durante o deploy com `run_certbot=true`.
+
+---
+
 ## DNS (registros A → IP da VPS)
 
 | Host | Uso |
