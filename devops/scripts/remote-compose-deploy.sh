@@ -91,8 +91,10 @@ ensure_env_dev() {
   fi
   if [[ -n "${APP_PUBLIC_URL:-}" ]]; then
     set_env_var APP_PUBLIC_URL "${APP_PUBLIC_URL}"
+    set_env_var NEXT_PUBLIC_APP_URL "${APP_PUBLIC_URL}"
   elif [[ -n "${vps_host:-}" ]]; then
     set_env_var APP_PUBLIC_URL "http://${vps_host}:3000"
+    set_env_var NEXT_PUBLIC_APP_URL "http://${vps_host}:3000"
   fi
 
   set_env_var NEXT_PUBLIC_API_URL "/api/v1"

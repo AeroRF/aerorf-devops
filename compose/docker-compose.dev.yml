@@ -1,10 +1,6 @@
 # =============================================================================
-# AeroRF — Desenvolvimento (VPS via pipeline aerorf-devops)
-# Infra padrão: postgres, redis, minio, observabilidade + exporters
-# Apps (profile apps): imagens GHCR — ghcr.io/aerorf/aerorf-backend|frontend
-#
-# Deploy: GitHub Actions deploy-development.yml (sem comandos locais)
-# Dados: volumes isolados project-name aerorf-dev — NÃO replicar em homolog/prod
+# AeroRF — Desenvolvimento (stack completa para validação local)
+# Uso: docker compose -f infra/compose/docker-compose.dev.yml up
 # =============================================================================
 
 networks:
@@ -29,9 +25,9 @@ services:
       POSTGRES_PASSWORD: aerorf
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
+      - ../../apps/api/migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
     ports:
-      - "127.0.0.1:5433:5432"
+      - "5432:5432"
     networks:
       - aerorf-net
     healthcheck:
@@ -50,7 +46,7 @@ services:
       MAX_CLIENT_CONN: 200
       DEFAULT_POOL_SIZE: 20
     ports:
-      - "127.0.0.1:6432:5432"
+      - "6432:5432"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +58,8 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    ports:
+      - "6379:6379"
     networks:
       - aerorf-net
 
@@ -96,8 +94,9 @@ services:
       - aerorf-net
 
   api:
-    profiles: ["apps"]
-    image: ghcr.io/aerorf/aerorf-backend:${AERORF_BACKEND_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
     container_name: aerorf_api
     env_file:
       - .env.dev
@@ -110,8 +109,7 @@ services:
       S3_SECRET_KEY: aerorf_secret
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
-      COOKIE_SECURE: "false"
+      CORS_ORIGIN: http://localhost:3000
     volumes:
       - ../keys/jwt-private.pem:/run/secrets/jwt_private:ro
       - ../keys/jwt-public.pem:/run/secrets/jwt_public:ro
@@ -125,13 +123,14 @@ services:
       - aerorf-net
 
   web:
-    profiles: ["apps"]
-    image: ghcr.io/aerorf/aerorf-frontend:${AERORF_FRONTEND_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
     container_name: aerorf_web
     environment:
-      NODE_ENV: production
       API_INTERNAL_URL: http://api:4000
       NEXT_PUBLIC_API_URL: /api/v1
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
     depends_on:
@@ -260,7 +259,6 @@ services:
       - aerorf-net
 
   gateway:
-    profiles: ["apps"]
     image: traefik:v2.11
     command:
       - "--providers.docker=true"

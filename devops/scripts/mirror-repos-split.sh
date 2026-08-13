@@ -63,6 +63,7 @@ rsync_ --delete --exclude='node_modules' \
   "${ROOT}/apps/web/components/" "${FE}/components/"
 rsync_ "${ROOT}/apps/web/lib/" "${FE}/lib/"
 rsync_ "${ROOT}/apps/web/public/" "${FE}/public/"
+cp "${ROOT}/apps/web/middleware.ts" "${FE}/middleware.ts"
 
 echo "==> Backend: apps/api → aerorf-backend"
 rsync_ --delete \
