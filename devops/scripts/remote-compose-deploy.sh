@@ -376,9 +376,23 @@ else
   docker logs aerorf_grafana --tail 25 2>&1 || true
 fi
 
+log "Parando API/Web antes de recriar PgBouncer (evita ENOTFOUND pgbouncer)..."
+compose_dev --profile apps stop api web 2>/dev/null || true
+
 log "PgBouncer (force-recreate — AUTH scram-sha-256)..."
 compose_dev up -d --force-recreate pgbouncer
-sleep 5
+log "Aguardando PgBouncer healthy..."
+for i in $(seq 1 30); do
+  if docker inspect aerorf_pgbouncer --format '{{.State.Health.Status}}' 2>/dev/null | grep -q healthy; then
+    log "PgBouncer healthy (tentativa ${i})"
+    break
+  fi
+  if [[ "${i}" -eq 30 ]]; then
+    log "PgBouncer ainda não healthy — logs:"
+    docker logs aerorf_pgbouncer --tail 20 2>&1 || true
+  fi
+  sleep 2
+done
 
 run_migrate_if_needed
 
