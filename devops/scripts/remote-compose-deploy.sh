@@ -126,7 +126,7 @@ ensure_env_dev() {
   fi
 
   set_env_var NEXT_PUBLIC_API_URL "/api/v1"
-  set_env_var API_INTERNAL_URL "http://host.docker.internal:4000"
+  set_env_var API_INTERNAL_URL "http://127.0.0.1:4000"
 }
 
 compose_dev() {
@@ -460,8 +460,8 @@ done
 log "Smoke test login (via proxy Next :3000)..."
 login_ok=0
 for i in $(seq 1 12); do
-  if docker exec aerorf_web wget -qO- http://host.docker.internal:4000/api/v1/health 2>/dev/null | grep -q ok; then
-    log "Web→API interno OK (tentativa ${i})"
+  if docker exec aerorf_web wget -qO- http://127.0.0.1:4000/api/v1/health 2>/dev/null | grep -q ok; then
+    log "Web→API via socat OK (tentativa ${i})"
   fi
   login_code="$(curl -s -o /tmp/aerorf-login.json -w '%{http_code}' \
     -X POST http://127.0.0.1:3000/api/v1/auth/login \
