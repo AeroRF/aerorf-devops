@@ -487,5 +487,13 @@ if [[ -f "${DEVOPS_DIR}/logs/crash-forensics/latest.log" ]]; then
   head -40 "${DEVOPS_DIR}/logs/crash-forensics/latest.log" 2>/dev/null || true
 fi
 
+log "Health watchdog (cron host — Slack independente do Prometheus)..."
+if [[ -f "${DEVOPS_DIR}/devops/scripts/install-health-watchdog-cron.sh" ]]; then
+  DEVOPS_DIR="${DEVOPS_DIR}" bash "${DEVOPS_DIR}/devops/scripts/install-health-watchdog-cron.sh" || log "Watchdog cron falhou (não bloqueia deploy)"
+  DEVOPS_DIR="${DEVOPS_DIR}" bash "${DEVOPS_DIR}/devops/scripts/health-watchdog.sh" || true
+else
+  log "install-health-watchdog-cron.sh ausente — atualize aerorf-devops (git pull)"
+fi
+
 log "Deploy concluído."
 compose_dev --profile apps ps
