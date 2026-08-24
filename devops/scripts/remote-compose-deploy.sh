@@ -353,6 +353,13 @@ cd "${COMPOSE_DIR}"
 export AERORF_BACKEND_TAG="${AERORF_BACKEND_TAG:-latest}"
 export AERORF_FRONTEND_TAG="${AERORF_FRONTEND_TAG:-latest}"
 
+log "Forensics — capturar estado ANTES de recriar containers..."
+if [[ -f "${DEVOPS_DIR}/devops/scripts/capture-crash-forensics.sh" ]]; then
+  DEVOPS_DIR="${DEVOPS_DIR}" bash "${DEVOPS_DIR}/devops/scripts/capture-crash-forensics.sh" || true
+elif [[ -f "${COMPOSE_DIR}/../devops/scripts/capture-crash-forensics.sh" ]]; then
+  DEVOPS_DIR="${DEVOPS_DIR}" bash "${COMPOSE_DIR}/../devops/scripts/capture-crash-forensics.sh" || true
+fi
+
 log "Infra (Postgres, Redis, MinIO, observabilidade + exporters)..."
 compose_dev up -d \
   postgres redis minio minio-init \
@@ -459,6 +466,11 @@ fi
 log "Diagnóstico da stack..."
 if [[ -f "${DEVOPS_DIR}/devops/scripts/stack-diagnostics.sh" ]]; then
   COMPOSE_DIR="${COMPOSE_DIR}" bash "${DEVOPS_DIR}/devops/scripts/stack-diagnostics.sh" || true
+fi
+
+if [[ -f "${DEVOPS_DIR}/logs/crash-forensics/latest.log" ]]; then
+  log "Último relatório forensics (início deste deploy):"
+  head -40 "${DEVOPS_DIR}/logs/crash-forensics/latest.log" 2>/dev/null || true
 fi
 
 log "Deploy concluído."
