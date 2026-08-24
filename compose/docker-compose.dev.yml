@@ -149,9 +149,12 @@ services:
     image: ghcr.io/aerorf/aerorf-frontend:${AERORF_FRONTEND_TAG:-latest}
     container_name: aerorf_web
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
-      API_INTERNAL_URL: http://api:4000
+      # host.docker.internal evita falhas de DNS container→container no VPS (proxy web→API).
+      API_INTERNAL_URL: http://host.docker.internal:4000
       NEXT_PUBLIC_API_URL: /api/v1
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
@@ -163,7 +166,8 @@ services:
       retries: 3
       start_period: 30s
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     networks:
       - aerorf-net
 

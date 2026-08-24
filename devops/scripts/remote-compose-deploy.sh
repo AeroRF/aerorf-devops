@@ -126,7 +126,7 @@ ensure_env_dev() {
   fi
 
   set_env_var NEXT_PUBLIC_API_URL "/api/v1"
-  set_env_var API_INTERNAL_URL "http://api:4000"
+  set_env_var API_INTERNAL_URL "http://host.docker.internal:4000"
 }
 
 compose_dev() {
@@ -321,6 +321,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/018_user_invites.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/019_contract_pendencies.sql" ]]; then
+    local mech_tables
+    mech_tables="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='aviation_mechanics';" \
+      2>/dev/null || echo 0)"
+    if [[ "${mech_tables}" -eq 0 ]]; then
+      log "Aplicando migration pendências contrato (019)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/019_contract_pendencies.sql"
+    fi
+  fi
 }
 
 run_seed() {
@@ -447,18 +458,31 @@ for i in $(seq 1 30); do
 done
 
 log "Smoke test login (via proxy Next :3000)..."
-login_code="$(curl -s -o /tmp/aerorf-login.json -w '%{http_code}' \
-  -X POST http://127.0.0.1:3000/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@aerorf.com.br","password":"admin123"}')"
-if [[ "${login_code}" != "200" ]]; then
-  log "Login smoke test falhou (HTTP ${login_code}):"
+login_ok=0
+for i in $(seq 1 12); do
+  if docker exec aerorf_web wget -qO- http://host.docker.internal:4000/api/v1/health 2>/dev/null | grep -q ok; then
+    log "Web→API interno OK (tentativa ${i})"
+  fi
+  login_code="$(curl -s -o /tmp/aerorf-login.json -w '%{http_code}' \
+    -X POST http://127.0.0.1:3000/api/v1/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"email":"admin@aerorf.com.br","password":"admin123"}')"
+  if [[ "${login_code}" == "200" ]]; then
+    log "Login smoke test OK (tentativa ${i})."
+    login_ok=1
+    break
+  fi
+  log "Login smoke tentativa ${i} — HTTP ${login_code}"
+  sleep 3
+done
+if [[ "${login_ok}" -ne 1 ]]; then
+  log "Login smoke test falhou (último HTTP ${login_code}):"
   head -c 400 /tmp/aerorf-login.json 2>/dev/null || true
   echo ""
   docker logs aerorf_web --tail 30 2>&1 || true
+  docker logs aerorf_api --tail 30 2>&1 || true
   exit 1
 fi
-log "Login smoke test OK."
 
 if [[ "${AERORF_SETUP_NGINX:-1}" == "1" ]]; then
   log "Nginx — LiteSpeed → reverse proxy (pipeline)..."
