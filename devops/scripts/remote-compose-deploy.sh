@@ -9,6 +9,19 @@ BACKEND_DIR="${AERORF_BACKEND_DIR:-$HOME/aerorf/aerorf-backend}"
 
 log() { printf '[deploy] %s\n' "$*"; }
 
+ensure_docker_boot() {
+  if command -v systemctl >/dev/null 2>&1; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      systemctl enable docker 2>/dev/null || true
+      systemctl start docker 2>/dev/null || true
+    else
+      sudo systemctl enable docker 2>/dev/null || true
+      sudo systemctl start docker 2>/dev/null || true
+    fi
+    log "Docker daemon: $(systemctl is-active docker 2>/dev/null || echo unknown)"
+  fi
+}
+
 ensure_devops_repo() {
   if [[ ! -d "${DEVOPS_DIR}/.git" ]]; then
     log "Clonando aerorf-devops em ${DEVOPS_DIR}..."
@@ -326,6 +339,7 @@ ensure_jwt_keys
 ensure_env_dev
 
 command -v docker >/dev/null 2>&1 || { log "Docker não encontrado no VPS."; exit 1; }
+ensure_docker_boot
 docker info >/dev/null 2>&1 || { log "Docker daemon não está rodando."; exit 1; }
 
 if [[ "${AERORF_IMAGES_PRELOADED:-}" == "1" ]]; then
@@ -440,6 +454,11 @@ if [[ -f "${DEVOPS_DIR}/devops/scripts/observability-slack-verify.sh" ]]; then
     bash "${DEVOPS_DIR}/devops/scripts/observability-slack-verify.sh" || log "Observability verify falhou (não bloqueia deploy)"
 else
   log "observability-slack-verify.sh ausente — atualize aerorf-devops (git pull)"
+fi
+
+log "Diagnóstico da stack..."
+if [[ -f "${DEVOPS_DIR}/devops/scripts/stack-diagnostics.sh" ]]; then
+  COMPOSE_DIR="${COMPOSE_DIR}" bash "${DEVOPS_DIR}/devops/scripts/stack-diagnostics.sh" || true
 fi
 
 log "Deploy concluído."

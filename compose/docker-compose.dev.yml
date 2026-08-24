@@ -23,6 +23,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: aerorf_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: aerorf
       POSTGRES_USER: aerorf
@@ -43,6 +44,7 @@ services:
   pgbouncer:
     image: edoburu/pgbouncer:1.22.1-p0
     container_name: aerorf_pgbouncer
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://aerorf:aerorf@postgres:5432/aerorf
       AUTH_TYPE: scram-sha-256
@@ -59,6 +61,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -68,6 +71,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: aerorf_minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: aerorf
@@ -99,6 +103,7 @@ services:
     profiles: ["apps"]
     image: ghcr.io/aerorf/aerorf-backend:${AERORF_BACKEND_TAG:-latest}
     container_name: aerorf_api
+    restart: unless-stopped
     env_file:
       - .env.dev
     environment:
@@ -117,6 +122,12 @@ services:
       - ../keys/jwt-public.pem:/run/secrets/jwt_public:ro
     ports:
       - "127.0.0.1:4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/api/v1/health | grep -q ok || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       - pgbouncer
       - redis
@@ -128,6 +139,7 @@ services:
     profiles: ["apps"]
     image: ghcr.io/aerorf/aerorf-frontend:${AERORF_FRONTEND_TAG:-latest}
     container_name: aerorf_web
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:4000
@@ -135,6 +147,12 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q ok || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       - api
     networks:
@@ -142,6 +160,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    restart: unless-stopped
     volumes:
       - ../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -155,6 +174,7 @@ services:
 
   alertmanager:
     image: prom/alertmanager:latest
+    restart: unless-stopped
     environment:
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
     volumes:
@@ -175,6 +195,7 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
+    restart: unless-stopped
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
@@ -191,6 +212,7 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
+    restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: postgres://aerorf:aerorf@postgres:5432/aerorf?sslmode=disable
     depends_on:
@@ -203,6 +225,7 @@ services:
 
   redis-exporter:
     image: oliver006/redis_exporter:latest
+    restart: unless-stopped
     environment:
       REDIS_ADDR: redis://redis:6379
     depends_on:
@@ -214,6 +237,7 @@ services:
 
   loki:
     image: grafana/loki:2.9.4
+    restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ../observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
@@ -225,6 +249,7 @@ services:
 
   promtail:
     image: grafana/promtail:2.9.4
+    restart: unless-stopped
     volumes:
       - ../observability/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
