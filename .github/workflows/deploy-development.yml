@@ -100,6 +100,7 @@ jobs:
           SSH_USER: ${{ secrets.DEV_SSH_USER }}
           SSH_PORT: ${{ secrets.DEV_SSH_PORT || '22022' }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
           BACKEND_TAG: ${{ inputs.backend_tag || 'latest' }}
@@ -112,18 +113,50 @@ jobs:
           echo "Pull no GitHub Actions (VPS HostGator frequentemente não alcança ghcr.io)..."
 
           ghcr_login() {
-            local token="$1" label="$2"
-            echo "Login GHCR como ${GHCR_ACTOR} (${label})..."
-            echo "${token}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
+            local user="$1" token="$2" label="$3"
+            echo "Login GHCR como ${user} (${label})..."
+            echo "${token}" | docker login ghcr.io -u "${user}" --password-stdin
           }
 
           pull_apps() {
             docker pull "${BACKEND_IMG}" && docker pull "${FRONTEND_IMG}"
           }
 
+          resolve_pat_user() {
+            local hinted
+            hinted="$(echo "${GHCR_USER:-}" | tr '[:upper:]' '[:lower:]')"
+            if [[ -n "${GHCR_USER}" && "${hinted}" != "aerorf" && "${GHCR_USER}" != *'@'* ]]; then
+              echo "${GHCR_USER}"
+              return 0
+            fi
+            python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          token = os.environ.get("GHCR_TOKEN", "")
+          req = urllib.request.Request(
+              "https://api.github.com/user",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=20) as resp:
+                  data = json.load(resp)
+              print(data.get("login") or "")
+          except Exception as exc:
+              print("", end="")
+              raise SystemExit(0) from exc
+          PY
+          }
+
           pulled=0
           if [[ -n "${GHCR_TOKEN}" ]]; then
-            if ghcr_login "${GHCR_TOKEN}" "secret GHCR_TOKEN"; then
+            PAT_USER="$(resolve_pat_user || true)"
+            if [[ -z "${PAT_USER}" ]]; then
+              echo "GHCR_TOKEN presente, mas não deu para descobrir o usuário dono do PAT."
+              echo "Defina GHCR_USER no environment development como o usuário GitHub dono do token (não a organização AeroRF)."
+            elif ghcr_login "${PAT_USER}" "${GHCR_TOKEN}" "secret GHCR_TOKEN"; then
               if pull_apps; then
                 pulled=1
               fi
@@ -134,14 +167,15 @@ jobs:
 
           if [[ "${pulled}" -eq 0 ]]; then
             echo "Tentando GITHUB_TOKEN do aerorf-devops..."
-            ghcr_login "${GITHUB_TOKEN}" "GITHUB_TOKEN"
+            ghcr_login "${GHCR_ACTOR}" "${GITHUB_TOKEN}" "GITHUB_TOKEN"
             if ! pull_apps; then
               echo "::error::Falha ao puxar ${BACKEND_IMG} e ${FRONTEND_IMG}."
-              echo "As imagens no GHCR são privadas e pertencem aos repos aerorf-backend / aerorf-frontend."
-              echo "O GITHUB_TOKEN deste workflow não tem leitura nesses pacotes."
-              echo "1) Environment development → secret GHCR_TOKEN = PAT classic com read:packages (Authorize SSO se a org exigir)."
-              echo "   NÃO use o nome da organização como usuário; o login usa o GitHub user que disparou o workflow."
-              echo "2) Ou, em cada package (aerorf-backend e aerorf-frontend): Package settings → Manage Actions access → AeroRF/aerorf-devops = Read."
+              echo "As imagens no GHCR são privadas. O GITHUB_TOKEN do aerorf-devops não as lê."
+              echo "No environment development:"
+              echo "  GHCR_TOKEN = PAT classic com read:packages (Authorize SSO na org, se houver)."
+              echo "  GHCR_USER  = usuário GitHub dono desse PAT (ex.: douglas). Nunca use AeroRF."
+              echo "Ou, em cada package (aerorf-backend e aerorf-frontend):"
+              echo "  Package settings → Manage Actions access → AeroRF/aerorf-devops = Read."
               exit 1
             fi
           fi
