@@ -332,6 +332,43 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/019_contract_pendencies.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/020_profiles.sql" ]]; then
+    local profiles_table
+    profiles_table="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='profiles';" \
+      2>/dev/null || echo 0)"
+    if [[ "${profiles_table}" -eq 0 ]]; then
+      log "Aplicando migration perfis (020)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/020_profiles.sql"
+    fi
+  fi
+  if [[ -f "${COMPOSE_DIR}/migrations/021_aviation_technical.sql" ]]; then
+    local aircraft_table
+    aircraft_table="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='aircraft';" \
+      2>/dev/null || echo 0)"
+    local tech_col
+    tech_col="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='aircraft' AND column_name='numero_serie';" \
+      2>/dev/null || echo 0)"
+    if [[ "${aircraft_table}" -gt 0 && "${tech_col}" -eq 0 ]]; then
+      log "Aplicando migration aviação técnica (021)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/021_aviation_technical.sql"
+    fi
+  fi
+  if [[ -f "${COMPOSE_DIR}/migrations/022_profile_unidade.sql" ]]; then
+    local profile_unidade_col
+    profile_unidade_col="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='unidade_id';" \
+      2>/dev/null || echo 0)"
+    if [[ "${profile_unidade_col}" -eq 0 ]]; then
+      log "Aplicando migration perfil por filial (022)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/022_profile_unidade.sql"
+    fi
+  fi
 }
 
 run_seed() {
