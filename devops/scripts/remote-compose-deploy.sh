@@ -369,6 +369,17 @@ run_migrate_if_needed() {
         < "${COMPOSE_DIR}/migrations/022_profile_unidade.sql"
     fi
   fi
+  if [[ -f "${COMPOSE_DIR}/migrations/023_component_calendar_period.sql" ]]; then
+    local tlv_cal_col
+    tlv_cal_col="$(docker exec aerorf_postgres psql -U aerorf -d aerorf -tAc \
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='aviation_components' AND column_name='tlv_cal_quantidade';" \
+      2>/dev/null || echo 0)"
+    if [[ "${tlv_cal_col}" -eq 0 ]]; then
+      log "Aplicando migration calendário de componentes (023)..."
+      docker exec -i aerorf_postgres psql -U aerorf -d aerorf \
+        < "${COMPOSE_DIR}/migrations/023_component_calendar_period.sql"
+    fi
+  fi
 }
 
 run_seed() {
